@@ -41,8 +41,8 @@ export const ConfigSchema = z.object({
       name: z.string().nullable().default(null),
       tiers: z.array(tier).default([
         { name: "none", minTotalRamGb: 0, model: null },
-        { name: "small", minTotalRamGb: 12, model: "<QWEN_9B_TAG>" },
-        { name: "medium", minTotalRamGb: 24, model: "<MINISTRAL_14B_TAG>" },
+        { name: "small", minTotalRamGb: 12, model: "qwen3.5:9b-q4_K_M" },
+        { name: "medium", minTotalRamGb: 24, model: "ministral-3:14b-instruct-2512-q4_K_M" },
       ]),
     })
     .prefault({}),
@@ -74,6 +74,21 @@ export const ConfigSchema = z.object({
     .object({
       maxFileMb: z.number().positive().default(200),
       minScore: z.number().nullable().default(null),
+    })
+    .prefault({}),
+  pruning: z
+    .object({
+      synonyms: z.record(z.string(), z.array(z.string())).default({
+        premium: ["revenue", "income", "written"],
+        claim: ["loss", "losses"],
+        paid: ["payout", "payment"],
+        region: ["area", "territory"],
+        broker: ["agent", "intermediary"],
+        limit: ["cover", "coverage"],
+        status: ["state"],
+        insured: ["exposure", "sum"],
+      }),
+      maxColumnsPerTable: z.number().int().min(5).max(40).default(12),
     })
     .prefault({}),
   // TODO(phase-3): replace with the full routing config type.

@@ -11,16 +11,16 @@ export default tseslint.config(
     },
   },
   {
-    // Privacy rule: only the privacy gate may import the remote adapter (paths finalised in Phase 2/3).
-    files: ["packages/**/*.ts", "apps/**/*.ts"],
-    ignores: ["packages/agent/src/gate/**"],
+    // Privacy rule: only the privacy gate may import the remote adapter (and it lives in models/src/remote).
+    files: ["packages/**/*.ts", "apps/**/*.ts", "scripts/**/*.ts"],
+    ignores: ["packages/agent/src/gate/**", "packages/models/src/remote/**", "packages/models/src/models.test.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
           patterns: [
             {
-              group: ["**/models/**/remote*", "**/remote-adapter*"],
+              group: ["**/remote/remote-adapter*", "**/remote-adapter*"],
               message: "Only the privacy gate (packages/agent/src/gate) may import the remote adapter.",
             },
           ],

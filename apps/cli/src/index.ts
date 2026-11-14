@@ -1,6 +1,9 @@
 import { Command } from "commander";
 import { EngineError, loadConfig, redactConfig, type QueryResult } from "@lf/core";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { DuckDbEngine } from "@lf/engine";
+import { MockModelAdapter, LocalOpenAICompatibleAdapter } from "@lf/models";
+import { renderReport, runBench, type EvalQuestion } from "@lf/agent";
 import { collectProbe, summarize } from "../../../scripts/probe-lib.js";
 
 const program = new Command().name("lf").description("Local-first desktop agent (developer CLI)");
@@ -121,10 +124,53 @@ program
     }
   });
 
-for (const [name, phase] of [
-  ["ask", 3],
-  ["bench", 2],
-] as const) {
+program
+  .command("bench")
+  .description("Benchmark local models on the simple table questions")
+  .requiredOption("--folder <dir>", "data folder")
+  .option("--models <tags>", "comma-separated Ollama model tags")
+  .option("--runs <n>", "runs per simple question", "3")
+  .option("--mock", "use a scripted mock model (no Ollama needed)")
+  .option("--questions <file>", "question set", "eval/questions.jsonl")
+  .action(async (o: { folder: string; models?: string; runs: string; mock?: boolean; questions: string }) => {
+    try {
+      const config = loadConfig();
+      const questions = readFileSync(o.questions, "utf8").split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l) as EvalQuestion);
+      const tags = o.mock ? ["mock-oracle"] : (o.models ?? config.localModel.tiers.map((t) => t.model).filter((m): m is string => !!m).join(",")).split(",").map((x) => x.trim()).filter(Boolean);
+      const models = tags.map((tag) => ({
+        name: tag,
+        port: o.mock
+          ? new MockModelAdapter([{
+              match: (req) => questions.some((q) => req.messages[0]!.content.includes("Q: " + q.question)),
+              reply: (req) => {
+                const q = questions.find((x) => req.messages[0]!.content.includes("Q: " + x.question))!;
+                return q.label === "simple" && q.expected.type === "sql"
+                  ? { object: { sql: q.expected.value, tables: [], confidence: 0.95, needsEscalation: false, reason: "reference" } }
+                  : { object: { sql: "", tables: [], confidence: 0.2, needsEscalation: true, reason: "hard" } };
+              },
+            }], tag)
+          : new LocalOpenAICompatibleAdapter({ baseUrl: config.localModel.baseUrl, model: tag, timeoutMs: 180_000 }),
+      }));
+      await withEngine(o.folder, false, async (engine) => {
+        const schemas = engine.getSchemas();
+        const profiles: Record<string, Awaited<ReturnType<typeof engine.profile>>> = {};
+        for (const s of schemas) profiles[s.tableName] = await engine.profile(s.tableName);
+        const runs = Math.max(1, Number(o.runs) || 3);
+        const result = await runBench({ engine, schemas, profiles, models, questions, runs, prune: { synonyms: config.pruning.synonyms }, onProgress: (m) => console.error(m) });
+        const date = new Date().toISOString().slice(0, 10);
+        const md = renderReport(result, summarize(await collectProbe(config)), { runs, date });
+        mkdirSync("eval/reports", { recursive: true });
+        writeFileSync(`eval/reports/model-bench-${date}${o.mock ? "-mock" : ""}.md`, md);
+        writeFileSync(`eval/reports/model-bench-${date}${o.mock ? "-mock" : ""}.json`, JSON.stringify(result, null, 2));
+        console.log(md);
+        console.log(`Saved eval/reports/model-bench-${date}${o.mock ? "-mock" : ""}.md and .json`);
+      });
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+for (const [name, phase] of [["ask", 3]] as const) {
   program
     .command(name)
     .description(`(arrives in Phase ${phase})`)
