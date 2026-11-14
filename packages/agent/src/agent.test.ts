@@ -50,6 +50,17 @@ describe("pruneSchema", () => {
     const r = pruneSchema("any flood last year", [policies, claims], prof, { synonyms });
     expect(r.tablesNeeded[0]).toBe("t_claims");
   });
+  it("matches profile values as whole words only (country code 'us' is not in 'cause')", () => {
+    const prof: Record<string, ColumnProfile[]> = {
+      t_claims: [{ name: "country", type: "VARCHAR", nullFraction: 0, distinctEstimate: 2, topValues: [{ value: "US", count: 3 }] }],
+    };
+    const r = pruneSchema("claims by cause", [policies, { ...claims, columns: [...claims.columns, col("country")] }], prof, { synonyms });
+    expect(r.tables.find((t) => t.tableName === "t_claims")!.columns.find((c) => c.name === "country")?.score ?? 0).toBe(0);
+  });
+  it("needs a second table only for words the first table cannot explain", () => {
+    const one = pruneSchema("How many policies are there?", [policies, claims], {}, { synonyms });
+    expect(one.tablesNeeded).toEqual(["t_policies"]);
+  });
   it("flags multi-table questions", () => {
     const r = pruneSchema("paid claims amount per policy premium", [policies, claims], {}, { synonyms });
     expect(r.tablesNeeded).toHaveLength(2);

@@ -51,12 +51,16 @@ export function renderSchema(pruned: PruneResult): string {
 export function buildLocalSqlRequest(
   question: string,
   pruned: PruneResult,
-  opts: { temperature?: number; previousError?: string; maxTokens?: number } = {},
+  opts: { temperature?: number; previousError?: string; maxTokens?: number; history?: { role: "user" | "assistant"; text: string }[] } = {},
 ): GenerateRequest {
   const err = opts.previousError ? `\nYour previous query failed: ${opts.previousError}\nFix it.` : "";
+  const past = opts.history ?? [];
+  const hist = past.length
+    ? `Earlier in this chat:\n${past.map((h) => `${h.role === "user" ? "User" : "Assistant"}: ${h.text.slice(0, 200)}`).join("\n")}\n\n`
+    : "";
   return {
     system: SYSTEM,
-    messages: [{ role: "user", content: `Tables:\n${renderSchema(pruned)}\n\nQ: ${question}${err}` }],
+    messages: [{ role: "user", content: `${hist}Tables:\n${renderSchema(pruned)}\n\nQ: ${question}${err}` }],
     responseSchema: LOCAL_SQL_SCHEMA as unknown as Record<string, unknown>,
     temperature: opts.temperature ?? 0,
     maxTokens: opts.maxTokens ?? 400,

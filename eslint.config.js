@@ -20,7 +20,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ["**/remote/remote-adapter*", "**/remote-adapter*"],
+              group: ["**/remote/remote-adapter*", "**/remote-adapter*", "@lf/models/remote"],
               message: "Only the privacy gate (packages/agent/src/gate) may import the remote adapter.",
             },
           ],

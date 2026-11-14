@@ -37,6 +37,8 @@ export interface ProfileOptions {
 export interface DataEnginePort {
   scanFolder(folder: string, opts?: { depth?: 0 | 1 }): Promise<FileEntry[]>;
   registerFiles(entries: FileEntry[]): Promise<TableSchema[]>;
+  /** Tables currently registered (after registerFiles). */
+  getSchemas(): TableSchema[];
   profile(tableName: string, options?: ProfileOptions): Promise<ColumnProfile[]>;
   runReadOnlySql(sql: string, limits?: Partial<QueryLimits>): Promise<QueryResult>;
   sampleRows(tableName: string, n: number, columns?: string[]): Promise<QueryResult>;

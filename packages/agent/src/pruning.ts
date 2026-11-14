@@ -10,6 +10,8 @@ export interface PrunedTable {
   tableName: string;
   columns: PrunedColumn[];
   score: number;
+  /** Question words this table has evidence for (column names, table name, values). */
+  covered: string[];
 }
 export interface PruneResult {
   tables: PrunedTable[];
@@ -24,6 +26,12 @@ export interface PruneOptions {
   minColumnsPerTable?: number;
   /** How many tables to keep in the output at most. */
   maxTables?: number;
+}
+
+/** Whole-word (not substring) match: country code "us" must not match "cause". */
+function wordIn(text: string, word: string): boolean {
+  const esc = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`).test(text);
 }
 
 export function stem(w: string): string {
@@ -65,18 +73,27 @@ export function pruneSchema(
   const expanded = new Set(qTokens);
   for (const [key, set] of syn) for (const t of qTokens) if (set.has(t)) expanded.add(key);
 
+  // Column names present in several tables (keys like policy_id, generic ones like status) say little
+  // about which table a question needs, so they do not count towards table relevance.
+  const nameFreq = new Map<string, number>();
+  for (const s of schemas) for (const c of s.columns) nameFreq.set(c.name, (nameFreq.get(c.name) ?? 0) + 1);
+
   const tables: PrunedTable[] = schemas.map((s) => {
     const prof = new Map((profiles[s.tableName] ?? []).map((p) => [p.name, p]));
     const nameTokens = tokens(s.tableName.replace(/^t_/, "").replace(/_/g, " "));
-    let tableScore = nameTokens.filter((t) => expanded.has(t)).length * 2;
+    let tableScore = nameTokens.filter((t) => expanded.has(t)).length * 4;
+    const covered = new Set<string>(nameTokens.filter((t) => expanded.has(t)));
     const scored: PrunedColumn[] = s.columns.map((c) => {
       const ct = tokens(c.name.replace(/_/g, " "));
       let score = ct.filter((t) => qTokens.has(t)).length * 3;
       score += ct.filter((t) => !qTokens.has(t) && expanded.has(t)).length * 2;
       const p = prof.get(c.name);
-      const hits = (p?.topValues ?? []).filter((v) => v.value.length > 1 && qLower.includes(v.value.toLowerCase()));
+      const hits = (p?.topValues ?? []).filter((v) => v.value.length > 1 && wordIn(qLower, v.value.toLowerCase()));
       score += hits.length * 3;
-      tableScore += score;
+      for (const t of ct) if (expanded.has(t)) covered.add(t);
+      for (const h of hits) for (const t of tokens(h.value)) covered.add(t);
+      if ((nameFreq.get(c.name) ?? 1) < 2) tableScore += score;
+      else tableScore += hits.length * 3;
       const col: PrunedColumn = { name: c.name, type: c.type, score };
       if (p?.topValues?.length) col.topValues = p.topValues.map((v) => v.value);
       return col;
@@ -91,12 +108,30 @@ export function pruneSchema(
     // restore original column order
     const order = new Map(s.columns.map((c, i) => [c.name, i]));
     const columns = [...keep.values()].sort((a, b) => (order.get(a.name) ?? 0) - (order.get(b.name) ?? 0));
-    return { tableName: s.tableName, columns, score: tableScore };
+    return { tableName: s.tableName, columns, score: tableScore, covered: [...covered] };
   });
 
+  // Table relevance: each question word is worth 1/(number of tables that have evidence for it),
+  // so words every table shares (status, region, keys) barely matter. A table-name match adds 1.
+  const df = new Map<string, number>();
+  for (const t of tables) for (const w of t.covered) df.set(w, (df.get(w) ?? 0) + 1);
+  for (const t of tables) {
+    const nameHits = tokens(t.tableName.replace(/^t_/, "").replace(/_/g, " ")).filter((w) => expanded.has(w)).length;
+    t.score = nameHits + t.covered.reduce((n, w) => n + 1 / (df.get(w) ?? 1), 0);
+  }
   tables.sort((a, b) => b.score - a.score || a.tableName.localeCompare(b.tableName));
   const kept = tables.slice(0, opts.maxTables ?? 6);
-  const needed = kept.filter((t) => t.score > 0).map((t) => t.tableName);
+  // Greedy cover: the best table, then only tables that explain a question word nobody else does.
+  const needed: string[] = [];
+  const seen = new Set<string>();
+  for (const t of kept) {
+    if (t.score <= 0) continue;
+    const fresh = t.covered.filter((w) => !seen.has(w));
+    if (needed.length === 0 || fresh.length > 0) {
+      needed.push(t.tableName);
+      for (const w of t.covered) seen.add(w);
+    }
+  }
   if (needed.length === 0 && kept[0]) needed.push(kept[0].tableName);
   const inScope = kept.filter((t) => needed.includes(t.tableName));
   return {

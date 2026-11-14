@@ -91,8 +91,25 @@ export const ConfigSchema = z.object({
       maxColumnsPerTable: z.number().int().min(5).max(40).default(12),
     })
     .prefault({}),
-  // TODO(phase-3): replace with the full routing config type.
-  routing: z.record(z.string(), z.unknown()).default({}),
+  routing: z
+    .object({
+      mode: z.enum(["local-first", "remote-sql"]).default("local-first"),
+      maxColumnsLocal: z.number().int().positive().default(40),
+      maxFilesLocal: z.number().int().positive().default(1),
+      escalateKeywords: z
+        .array(z.string())
+        .default(["why", "explain", "forecast", "predict", "recommend", "compare to last", "trend", "insight", "root cause"]),
+      typeRoutes: z
+        .record(z.string(), z.enum(["local", "remote"]))
+        .default({
+          lookup: "local", filter: "local", aggregate: "local", groupby: "local", topn: "local",
+          chart: "local", join: "remote", explain: "remote", other: "remote",
+        }),
+      maxLocalAttempts: z.number().int().min(1).max(5).default(2),
+      requireAgreement: z.boolean().default(true),
+      minConfidence: z.number().min(0).max(1).default(0.6),
+    })
+    .prefault({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
