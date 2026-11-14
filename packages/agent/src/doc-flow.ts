@@ -99,7 +99,7 @@ export async function* docFlow(
   }
   const chunks = found.chunks;
   const files = [...new Set(chunks.map((c) => c.fileAlias))];
-  yield { type: "trace", step: "documents", status: "done", detail: `${chunks.length} passage(s) from ${files.join(", ")}` };
+  yield { type: "trace", step: "documents", status: "done", detail: `${chunks.length} passage(s) from ${files.join(", ")}`, data: { passages: chunks.map((c) => ({ ref: `${c.fileAlias} ${c.location.page !== undefined ? "p" + c.location.page : "slide" + c.location.slide}`, score: Number((c.score ?? 0).toFixed(1)), snippet: c.text.replace(/s+/g, " ").slice(0, 160) })) } };
 
   // Several documents only matter when more than one of them matches about as well as the best one.
   const bestByFile = new Map<string, number>();

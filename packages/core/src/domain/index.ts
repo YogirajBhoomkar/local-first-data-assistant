@@ -108,7 +108,7 @@ export interface AnswerResult {
 }
 
 export type TurnEvent =
-  | { type: "trace"; step: string; status: "start" | "done" | "skip" | "error"; detail: string }
+  | { type: "trace"; step: string; status: "start" | "done" | "skip" | "error"; detail: string; data?: Record<string, unknown> }
   | { type: "route"; route: RouteTarget; layer: number; reasons: string[] }
   | { type: "egress"; egressId: string; destination: "remote-model"; summary: string }
   | { type: "confirm"; egressId: string; preview: string }

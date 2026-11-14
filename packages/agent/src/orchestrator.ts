@@ -134,7 +134,7 @@ export class TableAgent implements AgentContract {
     yield { type: "trace", step: "schema", status: "start", detail: "Finding the tables and columns this question needs" };
     for (const s of schemas) if (!this.profiles[s.tableName]) this.profiles[s.tableName] = await this.d.engine.profile(s.tableName);
     const pruned = pruneSchema(req.question, schemas, this.profiles, { synonyms: config.pruning.synonyms, maxColumnsPerTable: config.pruning.maxColumnsPerTable });
-    yield { type: "trace", step: "schema", status: "done", detail: `${pruned.tablesNeeded.length} table(s), ${pruned.totalColumnsInScope} columns in scope` };
+    yield { type: "trace", step: "schema", status: "done", detail: `${pruned.tablesNeeded.length} table(s), ${pruned.totalColumnsInScope} columns in scope`, data: { tablesNeeded: pruned.tablesNeeded, columnsInScope: pruned.totalColumnsInScope, tables: pruned.tables.map((t) => ({ table: t.tableName, score: Number(t.score.toFixed(2)), columns: t.columns.map((c) => c.name) })) } };
 
     // ---- documents or tables?
     if (docAliases.length > 0) {
@@ -171,7 +171,7 @@ export class TableAgent implements AgentContract {
       yield { type: "trace", step: "classify", status: "start", detail: "Classifying the question" };
       const c = await this.d.classifier.classify(req.question, history);
       qType = c.type;
-      yield { type: "trace", step: "classify", status: "done", detail: `${c.type} (confidence ${c.confidence.toFixed(2)})` };
+      yield { type: "trace", step: "classify", status: "done", detail: `${c.type} (confidence ${c.confidence.toFixed(2)})`, data: { type: c.type, confidence: c.confidence } };
       if (c.confidence < 0.5) {
         route = "remote";
         layer = 3;
@@ -334,6 +334,7 @@ export class TableAgent implements AgentContract {
         yield { type: "trace", step: "local-sql", status: "error", detail: reasons.at(-1)! };
         continue;
       }
+      yield { type: "trace", step: "local-sql", status: "done", detail: out.sql.trim() ? "Local model wrote SQL" : "Local model asked to escalate", data: { sql: out.sql, confidence: out.confidence, needsEscalation: out.needsEscalation, reason: out.reason } };
       if (out.needsEscalation || !out.sql.trim()) {
         reasons.push(`local model asked to escalate${out.reason ? `: ${out.reason}` : ""}`);
         yield { type: "trace", step: "local-sql", status: "skip", detail: reasons.at(-1)! };
@@ -372,7 +373,7 @@ export class TableAgent implements AgentContract {
           continue;
         }
       }
-      yield { type: "trace", step: "verify", status: "done", detail: `${result.rowCount} row(s), checks passed` };
+      yield { type: "trace", step: "verify", status: "done", detail: `${result.rowCount} row(s), checks passed`, data: { rows: result.rowCount, elapsedMs: result.elapsedMs, checks: ["SQL passed the read-only guard", "query ran in time", "at least one row", "result is not all null", `confidence ${out.confidence.toFixed(2)} >= ${rcfg.minConfidence}`, ...(rcfg.requireAgreement ? ["a second generation gave the same result"] : [])] } };
       return { ok: true, result, sql: out.sql, attempts, reasons };
     }
     return { ok: false, attempts, reasons };
@@ -432,7 +433,7 @@ export class TableAgent implements AgentContract {
         }
       }
       if (!failure) {
-        yield { type: "trace", step: "remote-sql", status: "done", detail: `${queries.length} quer${queries.length === 1 ? "y" : "ies"} ran locally` };
+        yield { type: "trace", step: "remote-sql", status: "done", detail: `${queries.length} quer${queries.length === 1 ? "y" : "ies"} ran locally`, data: { queries, explanation: parsed.explanation } };
         const ordered = results.some((r) => r.rowCount > 0) ? [...results].sort((a, b) => Number(b.rowCount > 0) - Number(a.rowCount > 0)) : results;
         const primaryIdx = results.indexOf(ordered[0]!);
         return { ok: true, results: ordered, sql: [queries[primaryIdx]!, ...queries.filter((_, i) => i !== primaryIdx)], rounds: round };
