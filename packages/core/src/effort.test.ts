@@ -36,7 +36,7 @@ describe("estimateEffort", () => {
     expect(est("show it", { classification: { type: "join", confidence: 0.9 } }).level).toBe("high");
     expect(est("show it", { classification: { type: "aggregate", confidence: 0.9 } }).level).toBe("low");
   });
-  it("decision-model signals add weighted points", () => {
+  it("decision-model signals add weighted points (only confidence above 0.5 counts)", () => {
     const hi = est("show the figures", { decision: { needsReasoning: 0.9, multiStep: 0.8 } });
     expect(hi.level).toBe("high");
     expect(hi.signals.map((s) => s.name)).toEqual(expect.arrayContaining(["laya-reasoning", "laya-multi-step"]));

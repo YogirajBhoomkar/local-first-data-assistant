@@ -31,6 +31,8 @@ export interface DocumentStorePort {
   /** Like `search`, but also says why nothing was returned. */
   searchWithReason(query: string, opts: DocSearchOptions): Promise<DocSearchResult>;
   getChunk(id: string): Chunk | undefined;
+  /** All chunks of the given documents in reading order (page or slide order). */
+  chunksOf(aliases: string[]): Chunk[];
   /** Aliases of documents that were indexed. */
   aliases(): string[];
 }

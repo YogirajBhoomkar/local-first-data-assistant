@@ -1,6 +1,15 @@
 import { readFile } from "node:fs/promises";
 // The pdfjs "legacy" build runs in Node without a browser or canvas for text extraction.
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { GlobalWorkerOptions, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+
+// pdfjs decides whether it runs in Node by looking at the process. Inside an Electron utility process it concludes
+// "not Node" and then insists on a worker file ("No GlobalWorkerOptions.workerSrc specified"). Pointing it at the
+// worker that ships with the package makes it work both in plain Node and inside Electron.
+try {
+  if (!GlobalWorkerOptions.workerSrc) GlobalWorkerOptions.workerSrc = import.meta.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs");
+} catch {
+  /* resolution failed: extraction will report a clear error for each PDF */
+}
 
 export interface PageText {
   page: number;

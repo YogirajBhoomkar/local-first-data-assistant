@@ -4,3 +4,4 @@ export * from "./openai-compat.js";
 export * from "./local.js";
 export * from "./mock.js";
 export * from "./tier.js";
+export * from "./laya.js";

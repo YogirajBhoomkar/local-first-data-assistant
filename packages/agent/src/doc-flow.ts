@@ -14,7 +14,7 @@ import { tokens, type PruneResult } from "./pruning.js";
 const DOC_CUES =
   /\b(guidelines?|documents?|docs?|decks?|slides?|presentations?|pdfs?|pages?|sections?|speaker notes?|according to|say about|says|mentions?|mentioned|summaris?e|summariz?e|overview|report)\b/i;
 const DOC_SUMMARY =
-  /\b(summaris?e|summariz?e|summary|overview|compare|comparison|across|differences?|relate|list all|all the|main (risks|points|themes))\b/i;
+  /\b(summaris?e|summariz?e|summary|overview|gist|tl;?dr|highlights?|key (points|takeaways|messages)|takeaways?|describe|walk me through|what(?:'s| is) in|contents? of|tell me about|compare|comparison|across|differences?|relate|list all|all the|main (risks|points|themes))\b/i;
 const DEFAULT_MIN_SCORE_HINT = 12;
 
 export interface DocContext {
@@ -82,10 +82,24 @@ export async function* docFlow(
   const reasons: string[] = [plan.reason];
 
   yield { type: "trace", step: "documents", status: "start", detail: "Searching the documents" };
+  // A lookup in a named document searches only that document. A summary, comparison or list may need the whole
+  // document and other documents too: search everything, then make sure the named documents are fully covered.
+  const wide = DOC_SUMMARY.test(req.question);
   const found = await docs.searchWithReason(req.question, {
     topK: config.privacy.docTopK,
-    ...(plan.aliases.length ? { aliases: plan.aliases } : {}),
+    ...(plan.aliases.length && !wide ? { aliases: plan.aliases } : {}),
   });
+  // A document the user names explicitly is always read, even when no keyword of the question appears in it
+  // ("summarise the presentation1 document" has no word in common with the slides themselves).
+  if (plan.aliases.length && (wide || found.chunks.length === 0)) {
+    if (found.chunks.length === 0) reasons.push(`the question names ${plan.aliases.join(", ")}: reading it from the start`);
+    const have = new Set(found.chunks.map((c) => c.id));
+    const room = Math.max(0, config.privacy.docTopK - found.chunks.length);
+    // Named documents first, in reading order, until the passage cap (docTopK) is reached.
+    const missing = docs.chunksOf(plan.aliases).filter((c) => !have.has(c.id));
+    const merged = [...found.chunks, ...missing.slice(0, room)];
+    found.chunks = merged;
+  }
   if (found.chunks.length === 0) {
     const why = found.reason ?? "no relevant content found";
     reasons.push(why);

@@ -71,8 +71,48 @@ function NodeData({ node, turn }: { node: NodeId; turn: TurnState }) {
     ) : null;
   }
   if (node === "router") {
+    const eff = step("effort").at(-1)?.data as { level: string; score: number; mediumAt: number; highAt: number; signals: { name: string; points: number; note: string }[] } | undefined;
+    const laya = step("decision-model").at(-1);
     return (
       <div className="kv">
+        {eff && (
+          <>
+            <h4>Effort estimate</h4>
+            <div className="kv__row">
+              <span className={`chip ${eff.level === "high" ? "chip--remote" : "chip--local"}`}>{eff.level} effort</span>
+              <span className="muted">
+                score {eff.score} (medium from {eff.mediumAt}, high from {eff.highAt})
+              </span>
+              <span className="kv__text">
+                {eff.level === "high" ? "High effort goes straight to the remote model." : eff.level === "medium" ? "Medium effort is tried locally and must be reproduced by a second generation." : "Low effort is tried locally with one generation and cheap checks."}
+              </span>
+            </div>
+            {eff.signals.length === 0 && <div className="muted">No signals: a plain single-table lookup.</div>}
+            {eff.signals.map((x) => (
+              <div key={x.name} className="kv__row">
+                <span className="chip">+{x.points}</span>
+                <span className="kv__text" style={{ flexBasis: "auto" }}>{x.note}</span>
+              </div>
+            ))}
+          </>
+        )}
+        {laya && (
+          <>
+            <h4>Decision model (Laya)</h4>
+            {laya.status === "error" ? (
+              <div className="muted">{laya.detail}</div>
+            ) : laya.data ? (
+              <div className="stats">
+                {typeof laya.data.needsReasoning === "number" && <Stat k="needs reasoning" v={`${Math.round(laya.data.needsReasoning * 100)}%`} />}
+                {typeof laya.data.multiStep === "number" && <Stat k="several steps" v={`${Math.round(laya.data.multiStep * 100)}%`} />}
+                {typeof laya.data.ambiguous === "number" && <Stat k="vague" v={`${Math.round(laya.data.ambiguous * 100)}%`} />}
+              </div>
+            ) : (
+              <div className="muted">{laya.detail}</div>
+            )}
+            <div className="muted">Only confidence above 50% adds to the effort score; an unsure model changes nothing.</div>
+          </>
+        )}
         <h4>Decision</h4>
         {turn.routes.length === 0 && <div className="muted">Not decided yet.</div>}
         {turn.routes.map((r, i) => (

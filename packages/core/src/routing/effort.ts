@@ -56,6 +56,8 @@ const PERIOD = /\b(versus|vs\.?|compared? (to|with)|year[- ]over[- ]year|month[-
 const MULTI = /\b(ratio|percentage of|percent of|share of|divided by|relative to|per (policy|claim|broker) (and|then)|and then|as well as|for each .* (and|then)|rank(ed)?|rolling|cumulative|running total)\b/i;
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+/** Only confidence above a coin flip counts: an uncalibrated model that says 0.45 about everything adds nothing. */
+const lift = (p: number) => clamp01((p - 0.5) * 2);
 
 export function estimateEffort(i: EffortInput, t: EffortThresholds): EffortEstimate {
   const signals: EffortSignal[] = [];
@@ -87,12 +89,12 @@ export function estimateEffort(i: EffortInput, t: EffortThresholds): EffortEstim
 
   const d = i.decision;
   if (d) {
-    if (d.needsReasoning !== undefined) add("laya-reasoning", 3 * clamp01(d.needsReasoning), `Laya: ${(d.needsReasoning * 100).toFixed(0)}% likely to need reasoning`);
-    if (d.multiStep !== undefined) add("laya-multi-step", 1.5 * clamp01(d.multiStep), `Laya: ${(d.multiStep * 100).toFixed(0)}% likely to need several steps`);
-    if (d.ambiguous !== undefined) add("laya-ambiguous", 1.5 * clamp01(d.ambiguous), `Laya: ${(d.ambiguous * 100).toFixed(0)}% likely ambiguous`);
+    if (d.needsReasoning !== undefined) add("laya-reasoning", 3 * lift(d.needsReasoning), `Laya: ${(d.needsReasoning * 100).toFixed(0)}% likely to need reasoning`);
+    if (d.multiStep !== undefined) add("laya-multi-step", 1.5 * lift(d.multiStep), `Laya: ${(d.multiStep * 100).toFixed(0)}% likely to need several steps`);
+    if (d.ambiguous !== undefined) add("laya-ambiguous", 1.5 * lift(d.ambiguous), `Laya: ${(d.ambiguous * 100).toFixed(0)}% likely ambiguous`);
     if (d.effort) {
       const pts = d.effort.label === "high" ? 3 : d.effort.label === "medium" ? 1.5 : 0;
-      add("laya-effort", pts * clamp01(d.effort.confidence), `Laya rates the effort "${d.effort.label}" (${(d.effort.confidence * 100).toFixed(0)}% sure)`);
+      add("laya-effort", pts * lift(d.effort.confidence), `Laya rates the effort "${d.effort.label}" (${(d.effort.confidence * 100).toFixed(0)}% sure)`);
     }
   }
 

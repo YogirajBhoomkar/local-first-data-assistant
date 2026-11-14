@@ -162,6 +162,11 @@ export class DocumentStore implements DocumentStorePort {
     return this.chunks.get(id);
   }
 
+  chunksOf(aliases: string[]): Chunk[] {
+    const want = new Set(aliases);
+    return [...this.chunks.values()].filter((c) => want.has(c.fileAlias));
+  }
+
   aliases(): string[] {
     return [...new Set([...this.chunks.values()].map((c) => c.fileAlias))];
   }

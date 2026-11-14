@@ -16,6 +16,7 @@ import { DocumentStore } from "@lf/docs";
 import { LocalOpenAICompatibleAdapter, selectLocalModel } from "@lf/models";
 import { EgressLog, LocalModelClassifier, TableAgent, loadMaskKey, deterministicFollowUps } from "@lf/agent";
 import { collectProbe, detectOllama, summarize } from "../../../scripts/probe-lib.js";
+import { LayaSidecar } from "./laya-sidecar.js";
 import type {
   AgentMessage,
   AskPayload,
@@ -57,6 +58,8 @@ export class AgentRuntime {
   private folder: FolderView | null = null;
   private entries: FileEntry[] = [];
   private status: ModelStatus | null = null;
+  private laya: LayaSidecar | null = null;
+  private layaKey = "";
   private readonly turns = new Map<string, AbortController>();
 
   constructor(
@@ -97,6 +100,27 @@ export class AgentRuntime {
   private async buildAgent(): Promise<ModelStatus> {
     const { model, status: local } = await this.localModel();
     const remoteOk = remoteAvailable(this.config);
+    // Decision model (Laya): start or reuse the local service; routing works without it.
+    const d = this.settings.decision;
+    let decision: ModelStatus["decision"] = { available: false, model: null, reason: "Turned off in settings" };
+    if (d.enabled) {
+      const key = `${d.baseUrl}|${d.model}`;
+      if (!this.laya || this.layaKey !== key) {
+        this.laya?.stop();
+        this.laya = new LayaSidecar(d.baseUrl, d.model, this.env);
+        this.layaKey = key;
+        void this.laya.start((s) => {
+          this.status = this.status ? { ...this.status, decision: { available: s.available, model: d.model, reason: s.reason } } : this.status;
+          if (this.status) this.send({ type: "status", status: this.status });
+        });
+      }
+      const ls = this.laya.getStatus();
+      decision = { available: ls.available, model: d.model, reason: ls.reason };
+    } else {
+      this.laya?.stop();
+      this.laya = null;
+      this.layaKey = "";
+    }
     const status: ModelStatus = {
       local,
       remote: {
@@ -108,6 +132,7 @@ export class AgentRuntime {
             ? "No remote endpoint, model and key are configured."
             : "Remote model is turned off in settings.",
       },
+      decision,
     };
     this.status = status;
     if (this.engine) {
@@ -118,6 +143,7 @@ export class AgentRuntime {
         classifier: model ? new LocalModelClassifier(model) : new RuleClassifier(),
         maskKey: await loadMaskKey(this.config.cacheDir),
         ...(this.docs ? { docs: this.docs } : {}),
+        ...(this.laya ? { decision: this.laya.client(this.settings.decision.enabled ? 20_000 : 1000) } : {}),
       });
     }
     this.localAdapter = model;
@@ -130,6 +156,7 @@ export class AgentRuntime {
     return this.status ?? {
       local: { available: false, model: null, tier: "none", reason: "not initialised" },
       remote: { available: false, model: null, reason: "not initialised" },
+      decision: { available: false, model: null, reason: "not initialised" },
     };
   }
 
@@ -277,6 +304,7 @@ export class AgentRuntime {
   }
 
   async close(): Promise<void> {
+    this.laya?.stop();
     for (const c of this.turns.values()) c.abort();
     await this.engine?.close();
   }

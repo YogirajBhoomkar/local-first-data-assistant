@@ -43,6 +43,8 @@ export async function runSelfTest(win: BrowserWindow, opts: { question: string; 
     await sleep(500);
   }
   await sleep(600);
+  log("SELFTEST folder:", await js<string>(`(document.querySelector(".folder__bar") || { textContent: "" }).textContent.replace(/\s+/g, " ")`));
+  log("SELFTEST file statuses:", await js<string>(`[...document.querySelectorAll(".file")].map((e) => e.textContent.replace(/\s+/g, " ").trim()).join(" || ")`));
   await shot("02-folder-ready");
 
   await js(`(() => { const t = document.querySelector('textarea'); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(t, ${JSON.stringify(opts.question)}); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);

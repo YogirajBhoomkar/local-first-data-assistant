@@ -1,0 +1,26 @@
+{
+  "needs_reasoning": {
+    "type": "choice",
+    "instructions": "Does answering need explanation, forecasting, a recommendation or judgement, rather than just computing a number or listing facts?",
+    "criteria": {
+      "no": "the answer is a number, a list or a fact that can be computed or looked up",
+      "yes": "the answer needs causes explained, a forecast, a recommendation, an opinion or a summary across sources"
+    }
+  },
+  "multi_step": {
+    "type": "choice",
+    "instructions": "Does this need data combined from more than one table or file, or several dependent calculations?",
+    "criteria": {
+      "no": "one table, one calculation",
+      "yes": "several tables or files, or calculations that depend on each other"
+    }
+  },
+  "ambiguous": {
+    "type": "choice",
+    "instructions": "Is the question vague about what exactly to measure or which data to use?",
+    "criteria": {
+      "no": "it is clear what to compute",
+      "yes": "it could mean several different things"
+    }
+  }
+}

@@ -5,6 +5,12 @@
   "type": "module",
   "main": "dist-main/main.mjs",
   "dependencies": {
+    "@duckdb/node-api": "2.0.0-r.1",
+    "@duckdb/node-bindings": "2.0.0-r.1",
+    "exceljs": "4.4.0",
+    "pdfjs-dist": "6.5.438"
+  },
+  "devDependencies": {
     "@lf/agent": "0.0.0",
     "@lf/core": "0.0.0",
     "@lf/docs": "0.0.0",
@@ -15,20 +21,23 @@
     "@vitejs/plugin-react": "6.3.0",
     "animejs": "4.5.0",
     "electron": "45.3.2",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
     "plotly.js-dist-min": "4.3.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "vite": "8.3.8",
     "zod": "4.6.7"
   },
-  "devDependencies": {
-    "esbuild": "0.28.2"
-  },
   "scripts": {
     "build:electron": "node scripts/build-electron.mjs",
     "build:renderer": "vite build",
     "build": "npm run build:electron && npm run build:renderer",
     "dev": "node scripts/dev.mjs",
-    "start": "node scripts/start.mjs"
-  }
+    "start": "node scripts/start.mjs",
+    "package": "npm run build && electron-builder --config electron-builder.yml",
+    "package:dir": "npm run build && electron-builder --config electron-builder.yml --dir"
+  },
+  "description": "Local-first data assistant: desktop app",
+  "author": "Local-first data assistant"
 }

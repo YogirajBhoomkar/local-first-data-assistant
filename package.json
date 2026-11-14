@@ -21,7 +21,8 @@
     "gen:docs": "tsx scripts/gen-docs.ts",
     "desktop:dev": "npm run dev -w @lf/desktop",
     "desktop:build": "npm run build -w @lf/desktop",
-    "desktop:package": "npm run package -w @lf/desktop"
+    "desktop:package": "npm run package -w @lf/desktop",
+    "laya:serve": "node services/laya/serve.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

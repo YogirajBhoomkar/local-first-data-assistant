@@ -113,6 +113,17 @@ describe("TableAgent on documents", () => {
     expect(final.citations![0]).toMatchObject({ fileAlias: "underwriting_guidelines", page: 3 });
   });
 
+  it("a document named in the question is read even when no keyword of the question appears in it", async () => {
+    const remote = new Spy(() => ({ text: "The deck covers broker panel size and service levels [broker_strategy slide2]." }));
+    const { agent } = make(localDoc("unused"), remote);
+    const { events, final } = await ask(agent, "Give me the gist of the broker strategy deck.");
+    expect(final.answer).toMatch(/broker panel/);
+    const sent = JSON.parse(remote.calls[0]!.messages[0]!.content) as { chunks: { ref: string }[] };
+    expect(sent.chunks.length).toBeGreaterThanOrEqual(5); // the deck was read from the start, not matched by keywords
+    expect(sent.chunks.every((c) => c.ref.startsWith("broker_strategy"))).toBe(true);
+    expect(events.find((e) => e.type === "route")).toBeDefined();
+  });
+
   it("nothing relevant: says so, sends nothing, calls no model", async () => {
     const local = new Spy(() => { throw new Error("no model call expected"); });
     const { agent, log } = make(local, new Spy(() => { throw new Error("no remote call expected"); }));

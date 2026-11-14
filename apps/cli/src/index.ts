@@ -11,13 +11,14 @@ import {
   createOracleModels,
   loadMaskKey,
   renderE2eReport,
+  pruneSchema,
   renderReport,
   runBench,
   runE2e,
   type EvalQuestion,
 } from "@lf/agent";
-import { RuleClassifier, type ChatModelPort, type TurnEvent } from "@lf/core";
-import { selectLocalModel } from "@lf/models";
+import { RuleClassifier, estimateEffort, type ChatModelPort, type DecisionSignals, type EffortLevel, type TurnEvent } from "@lf/core";
+import { LayaClient, selectLocalModel } from "@lf/models";
 import { DocumentStore } from "@lf/docs";
 import { collectProbe, summarize } from "../../../scripts/probe-lib.js";
 
@@ -352,6 +353,98 @@ program
       } finally {
         await engine.close();
       }
+    } catch (e) {
+      fail(e);
+    }
+  });
+
+/** Gold effort for the evaluation questions (a judgement call, see docs/phases/phase-5.md). */
+function goldEffort(q: EvalQuestion): EffortLevel {
+  if (q.label === "simple") return "low";
+  return ["q022", "q023"].includes(q.id) ? "medium" : "high";
+}
+
+interface RouteRow {
+  id: string;
+  q: string;
+  gold: EffortLevel;
+  rules: EffortLevel;
+  withLaya: EffortLevel | null;
+}
+
+function routeStats(rows: RouteRow[], pick: (r: RouteRow) => EffortLevel | null) {
+  const rs = rows.filter((r) => pick(r) !== null);
+  const tp = rs.filter((r) => pick(r) === "high" && r.gold === "high").length;
+  const fp = rs.filter((r) => pick(r) === "high" && r.gold !== "high").length;
+  const fn = rs.filter((r) => pick(r) !== "high" && r.gold === "high").length;
+  return { acc3: rs.filter((r) => pick(r) === r.gold).length / (rs.length || 1), tp, fp, fn, tn: rs.length - tp - fp - fn };
+}
+
+program
+  .command("route-eval")
+  .description("Compare effort-based routing with and without the Laya decision model on the table questions")
+  .requiredOption("--folder <dir>", "data folder")
+  .option("--laya <url>", "Laya server URL (npm run laya:serve)", process.env.LAYA_URL ?? "http://127.0.0.1:8765")
+  .option("--laya-model <name>", "checkpoint name sent to the Laya server", "typed-decisions")
+  .option("--questions <file>", "question set", "eval/questions.jsonl")
+  .action(async (o: { folder: string; laya: string; layaModel: string; questions: string }) => {
+    try {
+      const config = loadConfig();
+      const rcfg = config.routing;
+      const questions = loadQuestions(o.questions).filter((q) => q.kind === "table");
+      const laya = new LayaClient({ baseUrl: o.laya, model: o.layaModel, timeoutMs: 280_000 });
+      const layaUp = await laya.health();
+      if (!layaUp) console.error(`Laya is not reachable at ${o.laya}: showing rules only. Start it with: npm run laya:serve`);
+      await withEngine(o.folder, false, async (engine) => {
+        const schemas = engine.getSchemas();
+        const profiles: Record<string, Awaited<ReturnType<typeof engine.profile>>> = {};
+        for (const sch of schemas) profiles[sch.tableName] = await engine.profile(sch.tableName);
+        const rows: RouteRow[] = [];
+        for (const q of questions) {
+          const pruned = pruneSchema(q.question, schemas, profiles, { synonyms: config.pruning.synonyms, maxColumnsPerTable: config.pruning.maxColumnsPerTable });
+          const input = (decision: DecisionSignals | null) => ({
+            question: q.question,
+            tablesNeeded: pruned.tablesNeeded.length,
+            columnsInScope: pruned.totalColumnsInScope,
+            ambiguousTables: pruned.ambiguousTables,
+            classification: null,
+            decision,
+            maxColumnsLocal: rcfg.maxColumnsLocal,
+            escalateKeywords: rcfg.escalateKeywords,
+          });
+          const rules = estimateEffort(input(null), rcfg.effort);
+          let withLaya: EffortLevel | null = null;
+          if (layaUp) {
+            const sig = await laya.decide(q.question).catch(() => null);
+            withLaya = estimateEffort(input(sig), rcfg.effort).level;
+          }
+          rows.push({ id: q.id, q: q.question, gold: goldEffort(q), rules: rules.level, withLaya });
+          console.error(`${q.id} gold=${goldEffort(q)} rules=${rules.level}${withLaya ? ` +laya=${withLaya}` : ""}`);
+        }
+        const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+        const line = (name: string, st: ReturnType<typeof routeStats>) =>
+          `| ${name} | ${pct(st.acc3)} | ${st.tp} | ${st.fp} | ${st.fn} | ${st.tn} | ${st.tp + st.fn ? pct(st.tp / (st.tp + st.fn)) : "-"} | ${st.tp + st.fp ? pct(st.tp / (st.tp + st.fp)) : "-"} |`;
+        const date = new Date().toISOString().slice(0, 10);
+        const head = [
+          `# Effort routing: rules vs rules + Laya (${date})`,
+          "",
+          `Laya checkpoint requested from the server: ${o.layaModel}${layaUp ? "" : " (server not reachable: Laya row empty)"}. ${questions.length} table questions. Gold effort is a judgement call: low = simple, medium = q022 and q023, high = everything else.`,
+          'A question rated "high" goes straight to the remote model; low and medium are tried locally.',
+          "",
+          "| signals | 3-class accuracy | high caught (tp) | wrongly high (fp) | missed high (fn) | tn | recall of high | precision of high |",
+          "|---|---|---|---|---|---|---|---|",
+          line("rules only", routeStats(rows, (r) => r.rules)),
+          layaUp ? line("rules + Laya", routeStats(rows, (r) => r.withLaya)) : "",
+        ].join("\n");
+        const body = rows
+          .map((r) => `| ${r.id} | ${r.gold} | ${r.rules}${r.rules !== r.gold ? " (x)" : ""} | ${r.withLaya ?? "-"}${r.withLaya && r.withLaya !== r.gold ? " (x)" : ""} | ${r.q.replaceAll("|", "/")} |`)
+          .join("\n");
+        mkdirSync("eval/reports", { recursive: true });
+        const file = `eval/reports/route-eval-${date}.md`;
+        writeFileSync(file, `${head}\n\n## Per question\n| id | gold | rules | rules + Laya | question |\n|---|---|---|---|---|\n${body}\n`);
+        console.log(head);
+        console.log(`Saved ${file}`);
+      });
     } catch (e) {
       fail(e);
     }

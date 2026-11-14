@@ -19,6 +19,7 @@ export const REMOTE_SQL_SCHEMA = {
 
 const SQL_SYSTEM = `You write DuckDB SQL for a data assistant. You are given a schema (table and column names, types, sometimes column profiles or a few sample rows). You do NOT have the data files.
 Write up to 3 read-only SELECT queries that together answer the question. Use only the tables and columns listed. Tokens like tok_ab12cd34ef are masked values: use them as they appear.
+When combining two tables (for example plan versus actual), aggregate each table to the shared keys first (CTEs or subqueries) and then join the aggregates, so rows are not duplicated and sums are not inflated.
 If "repair" is present, your previous SQL failed with the given error: fix it.
 Reply with JSON: {"sql": ["SELECT ..."], "explanation": "one sentence"}.`;
 

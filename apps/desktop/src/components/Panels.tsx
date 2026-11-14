@@ -79,6 +79,8 @@ export function StatusStrip({ status, onOpenSettings }: { status: ModelStatus | 
       </span>
       <span className={`dot ${status.remote.available ? "dot--ok" : "dot--off"}`} />
       <span>{status.remote.available ? `Remote model ready: ${status.remote.model}` : status.remote.reason}</span>
+      <span className={`dot ${status.decision.available ? "dot--ok" : "dot--off"}`} />
+      <span>{status.decision.available ? "Decision model (Laya) ready" : `Decision model (Laya): ${status.decision.reason}`}</span>
       <button className="link" onClick={onOpenSettings}>
         settings
       </button>
@@ -204,6 +206,25 @@ export function SettingsPanel({ view, onSave, onClose }: { view: SettingsView; o
           <label className="field">
             Server URL
             <input value={s.localModel.baseUrl} onChange={(e) => set("localModel", { ...s.localModel, baseUrl: e.target.value })} />
+          </label>
+        </section>
+
+        <section>
+          <h3>Decision model (Laya)</h3>
+          <p className="muted">
+            A small local model that rates each question (needs reasoning? several steps? vague?). Its confident signals are added to the effort estimate that decides local or remote. It runs on this laptop and sees only the question text.
+          </p>
+          <label className="check">
+            <input type="checkbox" checked={s.decision.enabled} onChange={(e) => set("decision", { ...s.decision, enabled: e.target.checked })} />
+            Use the decision model
+          </label>
+          <label className="field">
+            Server URL
+            <input value={s.decision.baseUrl} onChange={(e) => set("decision", { ...s.decision, baseUrl: e.target.value })} />
+          </label>
+          <label className="field">
+            Checkpoint
+            <input value={s.decision.model} onChange={(e) => set("decision", { ...s.decision, model: e.target.value })} />
           </label>
         </section>
 

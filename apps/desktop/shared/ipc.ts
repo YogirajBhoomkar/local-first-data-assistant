@@ -24,6 +24,14 @@ export const SettingsSchema = z.object({
     })
     .prefault({}),
   history: z.object({ turns: z.number().int().min(0).max(10).default(3) }).prefault({}),
+  /** The decision model (Laya) that adds typed signals to the effort estimate. */
+  decision: z
+    .object({
+      enabled: z.boolean().default(true),
+      baseUrl: z.string().url().default("http://127.0.0.1:8765"),
+      model: z.string().max(200).default("typed-decisions"),
+    })
+    .prefault({}),
   localModel: z
     .object({
       enabled: z.boolean().default(true),
@@ -94,6 +102,7 @@ export interface FolderView {
 export interface ModelStatus {
   local: { available: boolean; model: string | null; tier: string; reason: string; installHint?: string; warning?: string };
   remote: { available: boolean; model: string | null; reason: string };
+  decision: { available: boolean; model: string | null; reason: string };
 }
 
 export interface ProbeView {
