@@ -31,7 +31,7 @@ Per column: null fraction, `approx_count_distinct`, min/max for numeric and date
 - XLSX sheets are registered as `t_<file>_<sheet>`.
 
 ## Performance
-See `eval/reports/engine-perf.md` (results summarised below after the run).
+Run on the 50 MB synthetic set only (all six queries 130-300 ms, peak RSS ~180 MB; see `eval/reports/engine-perf.md`). The 2-5 GB run was **not done** at the owner's request (a ~1 GB real file will be provided later). To run it: `npm run gen:data -- --size 3GB --out ./sample-big` then `npx tsx scripts/perf-engine.ts ./sample-big`. Note: generating 3 GB takes well over 10 minutes (row-by-row string building).
 
 ## Known gaps
 - CSV views are re-scanned on every query (no Parquet conversion yet).
