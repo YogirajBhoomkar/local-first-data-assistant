@@ -6,6 +6,7 @@
   "dependencies": {
     "@lf/agent": "0.0.0",
     "@lf/core": "0.0.0",
+    "@lf/docs": "0.0.0",
     "@lf/engine": "0.0.0",
     "@lf/models": "0.0.0"
   }

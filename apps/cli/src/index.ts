@@ -18,6 +18,7 @@ import {
 } from "@lf/agent";
 import { RuleClassifier, type ChatModelPort, type TurnEvent } from "@lf/core";
 import { selectLocalModel } from "@lf/models";
+import { DocumentStore } from "@lf/docs";
 import { collectProbe, summarize } from "../../../scripts/probe-lib.js";
 
 const program = new Command().name("lf").description("Local-first desktop agent (developer CLI)");
@@ -197,7 +198,11 @@ async function buildAgent(folder: string, mock: boolean, questions: EvalQuestion
     ? loadConfig(process.env, { remoteModel: { baseUrl: "https://mock.invalid/v1", model: "mock", apiKey: "mock-key" } })
     : loadConfig();
   const engine = new DuckDbEngine({ cacheDir: config.cacheDir, ...config.engine });
-  await engine.registerFiles(await engine.scanFolder(folder));
+  const entries = await engine.scanFolder(folder);
+  await engine.registerFiles(entries);
+  const docs = new DocumentStore({ cacheDir: config.cacheDir, resolvePath: (e) => engine.pathOf(e), maxFileMb: config.docs.maxFileMb, minScore: config.docs.minScore });
+  const indexed = await docs.index(entries);
+  for (const sk of indexed.skipped) console.error(`Skipped ${sk.alias}: ${sk.reason}`);
   let local: ChatModelPort | null = null;
   let localName = "none";
   let remote: ChatModelPort | undefined;
@@ -221,9 +226,10 @@ async function buildAgent(folder: string, mock: boolean, questions: EvalQuestion
     local,
     classifier: local ? new LocalModelClassifier(local) : new RuleClassifier(),
     maskKey: await loadMaskKey(config.cacheDir),
+    docs,
     ...(remote ? { remoteFactory: () => remote } : {}),
   });
-  return { agent, engine, config, localName };
+  return { agent, engine, config, localName, docs };
 }
 
 function printEvent(e: TurnEvent): void {
@@ -242,6 +248,8 @@ function printEvent(e: TurnEvent): void {
       break;
     case "final":
       console.log("\n");
+      for (const ci of e.citations ?? [])
+        console.log(`CITATION: ${ci.fileAlias} ${ci.page !== undefined ? `page ${ci.page}` : `slide ${ci.slide}`}: "${ci.snippet.slice(0, 120)}"`);
       if (e.table) printTable(e.table);
       if (e.chart) console.log(`CHART: ${JSON.stringify(e.chart)}`);
       if (e.sql?.length) console.log(`SQL:\n  ${e.sql.join("\n  ")}`);
@@ -318,9 +326,9 @@ program
   .action(async (o: { folder: string; mock?: boolean; questions: string }) => {
     try {
       const questions = loadQuestions(o.questions);
-      const { agent, engine, config, localName } = await buildAgent(o.folder, !!o.mock, questions);
+      const { agent, engine, config, localName, docs } = await buildAgent(o.folder, !!o.mock, questions);
       try {
-        const result = await runE2e({ agent, engine, log: agent.log, questions, onProgress: (m) => console.error(m) });
+        const result = await runE2e({ agent, engine, log: agent.log, docs, topK: config.privacy.docTopK, questions, onProgress: (m) => console.error(m) });
         const date = new Date().toISOString().slice(0, 10);
         const md = renderE2eReport(result, {
           date,

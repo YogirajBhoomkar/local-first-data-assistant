@@ -12,6 +12,8 @@ export interface PrunedTable {
   score: number;
   /** Question words this table has evidence for (column names, table name, values). */
   covered: string[];
+  /** Matches of question words against table and column NAMES only (no values). */
+  nameEvidence: number;
 }
 export interface PruneResult {
   tables: PrunedTable[];
@@ -45,8 +47,9 @@ export function stem(w: string): string {
   return s;
 }
 
+const STOPWORDS = new Set(["of", "in", "on", "by", "to", "is", "it", "as", "at", "an", "or", "be", "do", "if", "no", "so", "up", "we", "the", "and", "for", "are", "was", "how", "what", "which"]);
 export const tokens = (text: string): string[] =>
-  (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).map(stem).filter((t) => t.length > 1);
+  (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((t) => !STOPWORDS.has(t)).map(stem).filter((t) => t.length > 1);
 
 const isIdOrDate = (c: { name: string; type: string }) =>
   /(^id$|_id$|_date$|^date$|_at$)/i.test(c.name) || /^(DATE|TIMESTAMP)/i.test(c.type);
@@ -83,6 +86,7 @@ export function pruneSchema(
     const nameTokens = tokens(s.tableName.replace(/^t_/, "").replace(/_/g, " "));
     let tableScore = nameTokens.filter((t) => expanded.has(t)).length * 4;
     const covered = new Set<string>(nameTokens.filter((t) => expanded.has(t)));
+    let nameEvidence = nameTokens.filter((t) => expanded.has(t)).length;
     const scored: PrunedColumn[] = s.columns.map((c) => {
       const ct = tokens(c.name.replace(/_/g, " "));
       let score = ct.filter((t) => qTokens.has(t)).length * 3;
@@ -91,6 +95,7 @@ export function pruneSchema(
       const hits = (p?.topValues ?? []).filter((v) => v.value.length > 1 && wordIn(qLower, v.value.toLowerCase()));
       score += hits.length * 3;
       for (const t of ct) if (expanded.has(t)) covered.add(t);
+      nameEvidence += ct.filter((t) => expanded.has(t)).length;
       for (const h of hits) for (const t of tokens(h.value)) covered.add(t);
       if ((nameFreq.get(c.name) ?? 1) < 2) tableScore += score;
       else tableScore += hits.length * 3;
@@ -108,7 +113,7 @@ export function pruneSchema(
     // restore original column order
     const order = new Map(s.columns.map((c, i) => [c.name, i]));
     const columns = [...keep.values()].sort((a, b) => (order.get(a.name) ?? 0) - (order.get(b.name) ?? 0));
-    return { tableName: s.tableName, columns, score: tableScore, covered: [...covered] };
+    return { tableName: s.tableName, columns, score: tableScore, covered: [...covered], nameEvidence };
   });
 
   // Table relevance: each question word is worth 1/(number of tables that have evidence for it),

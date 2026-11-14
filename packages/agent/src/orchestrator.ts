@@ -10,6 +10,7 @@ import {
   type AskRequest,
   type ChatModelPort,
   type ColumnProfile,
+  type DocumentStorePort,
   type Config,
   type DataEnginePort,
   type QueryResult,
@@ -21,7 +22,8 @@ import {
 } from "@lf/core";
 import { localAnswer, suggestFollowUps, templateAnswer } from "./answer.js";
 import { EgressLog } from "./gate/egress-log.js";
-import { PrivacyGate, type GateResult } from "./gate/gate.js";
+import { gateNote, PrivacyGate, type GateResult } from "./gate/gate.js";
+import { docFlow, docPlan } from "./doc-flow.js";
 import { buildLocalSqlRequest, parseLocalSql } from "./prompts/local-sql.js";
 import { parseRemoteSql } from "./prompts/remote.js";
 import { pruneSchema, type PruneResult } from "./pruning.js";
@@ -33,6 +35,8 @@ export interface TableAgentDeps {
   local: ChatModelPort | null;
   classifier: QuestionClassifier;
   maskKey: string;
+  /** Optional document index (PDF and PPTX). */
+  docs?: DocumentStorePort;
   remoteFactory?: (config: Config) => ChatModelPort;
   confirmTimeoutMs?: number;
   version?: string;
@@ -114,8 +118,9 @@ export class TableAgent implements AgentContract {
     }
     const history = req.history.slice(-config.history.turns * 2);
     const schemas = this.d.engine.getSchemas();
-    if (schemas.length === 0) {
-      yield { type: "error", code: "NO_TABLES", message: "No tables are registered from this folder." };
+    const docAliases = this.d.docs?.aliases() ?? [];
+    if (schemas.length === 0 && docAliases.length === 0) {
+      yield { type: "error", code: "NO_TABLES", message: "No tables or documents are available from this folder." };
       return;
     }
     const remoteOk = this.gate.available();
@@ -130,6 +135,15 @@ export class TableAgent implements AgentContract {
     for (const s of schemas) if (!this.profiles[s.tableName]) this.profiles[s.tableName] = await this.d.engine.profile(s.tableName);
     const pruned = pruneSchema(req.question, schemas, this.profiles, { synonyms: config.pruning.synonyms, maxColumnsPerTable: config.pruning.maxColumnsPerTable });
     yield { type: "trace", step: "schema", status: "done", detail: `${pruned.tablesNeeded.length} table(s), ${pruned.totalColumnsInScope} columns in scope` };
+
+    // ---- documents or tables?
+    if (docAliases.length > 0) {
+      const plan = await docPlan(req.question, schemas, pruned, this.d.docs!);
+      if (plan.path !== "table") {
+        yield* docFlow({ config, docs: this.d.docs!, local: this.d.local, gate: this.gate }, req, plan, pruned, history, signal, routeOnly);
+        return;
+      }
+    }
 
     // ---- routing, layer by layer
     const reasons: string[] = [];
@@ -278,10 +292,7 @@ export class TableAgent implements AgentContract {
   }
 
   private gateNote(g: GateResult): string {
-    if (g.status === "cancelled") return "Sending to the remote model was cancelled, so the answer stays local.";
-    if (g.status === "blocked") return `Not sent to the remote model: ${g.reason}.`;
-    if (g.status === "failed") return `The remote model call failed: ${g.message}`;
-    return "";
+    return gateNote(g);
   }
 
   private *cancelledEvent(): Generator<TurnEvent> {

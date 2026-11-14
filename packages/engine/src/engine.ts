@@ -75,6 +75,11 @@ export class DuckDbEngine implements DataEnginePort {
     this.registry = new Registry(this.opt.cacheDir);
   }
 
+  /** Real path of a scanned file. For in-process adapters (the document store) only; never put it in prompts or logs. */
+  pathOf(entry: FileEntry): string | undefined {
+    return this.paths.get(entry.id);
+  }
+
   async scanFolder(folder: string, opts: { depth?: 0 | 1 } = {}): Promise<FileEntry[]> {
     const { entries, paths } = await scan(folder, opts.depth ?? 0);
     for (const [k, v] of paths) this.paths.set(k, v);

@@ -25,7 +25,7 @@ export interface AgentContract {
 }
 
 export type QuestionType =
-  | "lookup" | "filter" | "aggregate" | "groupby" | "topn" | "chart" | "join" | "explain" | "other";
+  | "lookup" | "filter" | "aggregate" | "groupby" | "topn" | "chart" | "join" | "explain" | "document" | "other";
 
 export interface Classification {
   type: QuestionType;

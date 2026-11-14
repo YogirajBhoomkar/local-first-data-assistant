@@ -9,3 +9,5 @@ export { EgressLog } from "./gate/egress-log.js";
 export { PrivacyGate, loadMaskKey, type GateResult } from "./gate/gate.js";
 export * from "./e2e.js";
 export * from "./mocks.js";
+export * from "./doc-flow.js";
+export * from "./prompts/local-doc.js";

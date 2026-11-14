@@ -180,7 +180,13 @@ export function buildPacket(req: EscalationRequest, privacy: Privacy, maskKey: s
       out.push({ ref: `${c.fileAlias}${loc ? " " + loc : ""}`, text });
       tables.push(c.fileAlias);
     }
-    payload = { ...payload, chunks: out };
+    // Mixed questions (documents + tables): schema only, never values.
+    const schemaOnly = (req.tables ?? []).map((t) => ({
+      table: t.tableName,
+      columns: t.columns.filter((c) => !matches(deny, c.name)).map((c) => ({ name: c.name, type: c.type })),
+    }));
+    for (const t of req.tables ?? []) tables.push(t.tableName);
+    payload = { ...payload, chunks: out, ...(schemaOnly.length ? { tables: schemaOnly } : {}) };
     rowCount = out.length;
     summary = `${out.length} document chunks, ${chars} characters`;
   }

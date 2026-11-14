@@ -103,7 +103,7 @@ export const ConfigSchema = z.object({
         .record(z.string(), z.enum(["local", "remote"]))
         .default({
           lookup: "local", filter: "local", aggregate: "local", groupby: "local", topn: "local",
-          chart: "local", join: "remote", explain: "remote", other: "remote",
+          chart: "local", join: "remote", explain: "remote", document: "local", other: "remote",
         }),
       maxLocalAttempts: z.number().int().min(1).max(5).default(2),
       requireAgreement: z.boolean().default(true),

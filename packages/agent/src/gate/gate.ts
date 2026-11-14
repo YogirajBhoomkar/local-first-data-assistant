@@ -131,3 +131,11 @@ export class PrivacyGate {
     }
   }
 }
+
+/** One-line explanation for a send that did not complete. */
+export function gateNote(g: GateResult): string {
+  if (g.status === "cancelled") return "Sending to the remote model was cancelled, so the answer stays local.";
+  if (g.status === "blocked") return `Not sent to the remote model: ${g.reason}.`;
+  if (g.status === "failed") return `The remote model call failed: ${g.message}`;
+  return "";
+}

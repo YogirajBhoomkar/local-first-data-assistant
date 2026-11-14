@@ -89,6 +89,14 @@ export interface ChartSpec {
   title: string;
 }
 
+export interface Citation {
+  fileAlias: string;
+  page?: number;
+  slide?: number;
+  /** at most 200 characters */
+  snippet: string;
+}
+
 export interface AnswerResult {
   answer: string;
   table?: QueryResult;
@@ -96,6 +104,7 @@ export interface AnswerResult {
   sql?: string[];
   route: RouteDecision;
   filesUsed: string[];
+  citations?: Citation[];
 }
 
 export type TurnEvent =

@@ -4,3 +4,4 @@ export interface Clock {
 }
 export * from "./chat-model.js";
 export * from "./agent.js";
+export * from "./documents.js";
