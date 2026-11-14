@@ -11,6 +11,10 @@ export default tseslint.config(
     },
   },
   {
+    files: ["**/*.mjs"],
+    languageOptions: { globals: { process: "readonly", console: "readonly" } },
+  },
+  {
     // Privacy rule: only the privacy gate may import the remote adapter (and it lives in models/src/remote).
     files: ["packages/**/*.ts", "apps/**/*.ts", "scripts/**/*.ts"],
     ignores: ["packages/agent/src/gate/**", "packages/models/src/remote/**", "packages/models/src/models.test.ts"],

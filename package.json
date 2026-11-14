@@ -18,7 +18,10 @@
     "probe": "tsx scripts/probe.ts",
     "gen:data": "tsx scripts/gen-synthetic.ts",
     "cli": "tsx apps/cli/src/index.ts",
-    "gen:docs": "tsx scripts/gen-docs.ts"
+    "gen:docs": "tsx scripts/gen-docs.ts",
+    "desktop:dev": "npm run dev -w @lf/desktop",
+    "desktop:build": "npm run build -w @lf/desktop",
+    "desktop:package": "npm run package -w @lf/desktop"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
