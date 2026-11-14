@@ -41,8 +41,8 @@ export const ConfigSchema = z.object({
       name: z.string().nullable().default(null),
       tiers: z.array(tier).default([
         { name: "none", minTotalRamGb: 0, model: null },
-        { name: "small", minTotalRamGb: 12, model: "qwen3.5:9b-q4_K_M" },
-        { name: "medium", minTotalRamGb: 24, model: "ministral-3:14b-instruct-2512-q4_K_M" },
+        { name: "small", minTotalRamGb: 8, model: "qwen3.5:4b" },
+        { name: "medium", minTotalRamGb: 24, model: "qwen3.5:9b-q4_K_M" },
       ]),
     })
     .prefault({}),

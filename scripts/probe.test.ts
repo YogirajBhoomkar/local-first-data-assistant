@@ -11,7 +11,7 @@ describe("probe", () => {
   }, 30000);
   it("recommends tiers by RAM", () => {
     const { tiers } = loadConfig({}).localModel;
-    expect(recommendTier(8, tiers).tier).toBe("none");
+    expect(recommendTier(6, tiers).tier).toBe("none");
     expect(recommendTier(16, tiers).tier).toBe("small");
     expect(recommendTier(32, tiers).tier).toBe("medium");
   });

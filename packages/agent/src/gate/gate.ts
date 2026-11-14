@@ -105,7 +105,22 @@ export class PrivacyGate {
     };
     // Written BEFORE anything is sent.
     await this.d.log.append(record);
-    yield { type: "egress", egressId, destination: "remote-model", summary: `${packet.purpose}: ${packet.summary} (${record.byteSize} bytes)` };
+    yield {
+      type: "egress",
+      egressId,
+      destination: "remote-model",
+      summary: `${packet.purpose}: ${packet.summary} (${record.byteSize} bytes)`,
+      detail: {
+        purpose: packet.purpose,
+        privacyLevel: config.privacy.tabularLevel,
+        bytes: record.byteSize,
+        rows: packet.rowCount,
+        tables: packet.tables,
+        columns: packet.columns,
+        summarized: built.summarized,
+        preview: JSON.stringify(packet.payload, null, 2).slice(0, 8000),
+      },
+    };
 
     let approvedBy: EgressRecord["approvedBy"] = "auto";
     if (config.privacy.confirmBeforeSend) {

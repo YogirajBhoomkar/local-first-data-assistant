@@ -135,24 +135,24 @@ describe("mock adapter", () => {
 describe("selectLocalModel", () => {
   const cfg = loadConfig({});
   const probe = (ram: number, models: string[] = [], reachable = true) => ({ ram: { totalGb: ram }, ollama: { reachable, models } });
-  it("none tier for low RAM", () => expect(selectLocalModel(probe(8), cfg)).toMatchObject({ tier: "none", remoteOnly: true }));
+  it("none tier for low RAM", () => expect(selectLocalModel(probe(6), cfg)).toMatchObject({ tier: "none", remoteOnly: true }));
   it("small tier when installed", () =>
-    expect(selectLocalModel(probe(16, ["qwen3.5:9b-q4_K_M"]), cfg)).toMatchObject({ tier: "small", model: "qwen3.5:9b-q4_K_M", remoteOnly: false }));
+    expect(selectLocalModel(probe(16, ["qwen3.5:4b"]), cfg)).toMatchObject({ tier: "small", model: "qwen3.5:4b", remoteOnly: false }));
   it("medium tier when installed", () =>
-    expect(selectLocalModel(probe(32, ["ministral-3:14b-instruct-2512-q4_K_M"]), cfg).tier).toBe("medium"));
+    expect(selectLocalModel(probe(32, ["qwen3.5:9b-q4_K_M"]), cfg).tier).toBe("medium"));
   it("override wins, with a RAM warning", () => {
-    const c = loadConfig({}, { localModel: { name: "ministral-3:14b-instruct-2512-q4_K_M" } });
-    const r = selectLocalModel(probe(16, ["ministral-3:14b-instruct-2512-q4_K_M"]), c);
-    expect(r.model).toBe("ministral-3:14b-instruct-2512-q4_K_M");
+    const c = loadConfig({}, { localModel: { name: "qwen3.5:9b-q4_K_M" } });
+    const r = selectLocalModel(probe(16, ["qwen3.5:9b-q4_K_M"]), c);
+    expect(r.model).toBe("qwen3.5:9b-q4_K_M");
     expect(r.warning).toMatch(/24 GB/);
   });
   it("Ollama unreachable -> none with hint", () => {
     const r = selectLocalModel(probe(16, [], false), cfg);
     expect(r).toMatchObject({ tier: "none", remoteOnly: true });
-    expect(r.installHint).toMatch(/ollama pull qwen3.5/);
+    expect(r.installHint).toMatch(/ollama pull qwen3.5:4b/);
   });
   it("model missing -> none with pull hint", () =>
-    expect(selectLocalModel(probe(16, ["other:1b"]), cfg).installHint).toBe("ollama pull qwen3.5:9b-q4_K_M"));
+    expect(selectLocalModel(probe(16, ["other:1b"]), cfg).installHint).toBe("ollama pull qwen3.5:4b"));
   it("disabled in settings", () =>
     expect(selectLocalModel(probe(32), loadConfig({}, { localModel: { enabled: false } })).remoteOnly).toBe(true));
 });

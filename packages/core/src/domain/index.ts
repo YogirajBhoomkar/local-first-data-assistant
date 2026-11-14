@@ -110,7 +110,23 @@ export interface AnswerResult {
 export type TurnEvent =
   | { type: "trace"; step: string; status: "start" | "done" | "skip" | "error"; detail: string; data?: Record<string, unknown> }
   | { type: "route"; route: RouteTarget; layer: number; reasons: string[] }
-  | { type: "egress"; egressId: string; destination: "remote-model"; summary: string }
+  | {
+      type: "egress";
+      egressId: string;
+      destination: "remote-model";
+      summary: string;
+      /** Details for the "What was sent" view. `preview` is the exact payload (truncated to 8000 characters). */
+      detail?: {
+        purpose: EscalationPurpose;
+        privacyLevel: "schema" | "aggregates" | "rows";
+        bytes: number;
+        rows: number;
+        tables: string[];
+        columns: string[];
+        summarized: boolean;
+        preview: string;
+      };
+    }
   | { type: "confirm"; egressId: string; preview: string }
   | { type: "text"; delta: string }
   | { type: "text-reset" }
