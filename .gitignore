@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+sample-data/
+probe.json
+coverage/
+.lf-cache/
+eval/reports/*.json
