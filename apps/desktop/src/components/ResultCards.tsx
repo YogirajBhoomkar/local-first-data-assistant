@@ -28,6 +28,17 @@ export function SafeText({ text }: { text: string }) {
 }
 
 // ---------------------------------------------------------------- data table
+const prettyName = (n: string) => (n === "count_star()" ? "count" : n);
+/** Thousands separators for numbers (and numeric strings such as DECIMAL); everything else as text. */
+function fmtCell(v: unknown): string {
+  if (typeof v === "number" && Number.isFinite(v)) return Number.isInteger(v) ? v.toLocaleString("en-US") : v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const s = String(v);
+  if (/^-?\d+(\.\d+)?$/.test(s) && !/^0\d/.test(s) && s.length < 16) {
+    const n = Number(s);
+    return Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
+  return s;
+}
 export function DataTable({ result }: { result: QueryResult }) {
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const rows = useMemo(() => {
@@ -57,7 +68,7 @@ export function DataTable({ result }: { result: QueryResult }) {
               {result.columns.map((c, i) => (
                 <th key={i}>
                   <button className="th" onClick={() => setSort((s) => (s?.col === i ? (s.dir === 1 ? { col: i, dir: -1 } : null) : { col: i, dir: 1 }))} aria-label={`Sort by ${c.name}`}>
-                    {c.name}
+                    {prettyName(c.name)}
                     {sort?.col === i ? (sort.dir === 1 ? " ▲" : " ▼") : ""}
                   </button>
                 </th>
@@ -68,7 +79,7 @@ export function DataTable({ result }: { result: QueryResult }) {
             {rows.map((r, i) => (
               <tr key={i}>
                 {r.map((v, j) => (
-                  <td key={j}>{v === null ? <span className="muted">NULL</span> : String(v)}</td>
+                  <td key={j}>{v === null ? <span className="muted">NULL</span> : fmtCell(v)}</td>
                 ))}
               </tr>
             ))}

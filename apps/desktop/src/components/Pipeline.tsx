@@ -177,7 +177,7 @@ export default function Pipeline({ view, mode, selected, onSelect, speed, animat
                 {info.label}
               </text>
               <text className="node__sub" x={W / 2} y="38" textAnchor="middle">
-                {n.status === "waiting" ? "waiting for you" : n.status === "skipped" ? "not needed" : n.ms !== undefined && n.status !== "idle" ? fmtMs(n.ms) : info.sub}
+                {n.status === "waiting" ? "waiting for you" : n.status === "skipped" ? "not needed" : id === "router" && n.status === "done" && view.route ? `→ ${view.route}` : n.ms !== undefined && n.status !== "idle" ? fmtMs(n.ms) : info.sub}
               </text>
               <circle className="node__dot" cx={W - 10} cy="10" r="4" />
             </g>

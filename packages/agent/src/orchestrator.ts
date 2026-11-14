@@ -358,6 +358,7 @@ export class TableAgent implements AgentContract {
         continue;
       }
       if (rcfg.requireAgreement) {
+        yield { type: "trace", step: "verify", status: "start", detail: "Asking the local model a second time to confirm it gets the same result" };
         let agree = false;
         try {
           const r2 = await local.generate({ ...buildLocalSqlRequest(req.question, pruned, { temperature: 0.3, history }), ...(signal ? { signal } : {}) });

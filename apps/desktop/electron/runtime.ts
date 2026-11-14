@@ -202,6 +202,8 @@ export class AgentRuntime {
       return { alias: e.alias, kind: e.kind, sizeBytes: e.sizeBytes, status, notes, tables: mine.map((s) => s.tableName) };
     });
 
+    // Profile every table now (cached on disk) so the first question does not pay for it.
+    for (const t of schemas) await engine.profile(t.tableName);
     const examples = this.exampleQuestions(schemas, [...docAliases]);
     this.folder = { folderName, ready: true, files, tables, documents: [...docAliases], examples };
     await this.buildAgent(); // the agent needs the engine and the document index

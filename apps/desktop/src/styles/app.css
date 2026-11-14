@@ -101,9 +101,9 @@ button { font: inherit; color: inherit; }
 .folder { border-bottom: 1px solid var(--line); padding: 10px 16px; background: var(--panel); }
 .folder__bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .files { list-style: none; margin: 8px 0 0; padding: 0; max-height: 150px; overflow-y: auto; font-size: 12px; }
-.file { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.file { display: flex; align-items: center; gap: 8px; padding: 3px 0; flex-wrap: wrap; }
 .file__name { font-family: var(--mono); min-width: 150px; }
-.file__notes { flex: 1; }
+.file__notes { flex-basis: 100%; font-size: 11px; }
 .status { font-size: 11px; }
 .status--ready, .status--indexed { color: var(--local); }
 .status--converting { color: var(--accent); }
