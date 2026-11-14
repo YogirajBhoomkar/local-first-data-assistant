@@ -387,23 +387,26 @@ export class TableAgent implements AgentContract {
     signal?: AbortSignal,
   ): AsyncGenerator<TurnEvent, { ok: true; results: QueryResult[]; sql: string[]; rounds: number } | { ok: false; message: string }> {
     const { engine, config } = this.d;
-    const inScope = pruned.tables.filter((t) => pruned.tablesNeeded.includes(t.tableName));
+    // The remote model sees the schema (names and types) of EVERY registered table so it can pick the right
+    // ones itself; profiles and sample rows are only attached for the tables the router thought relevant.
     const tables: SchemaInput[] = [];
-    for (const t of inScope) {
-      const cols = t.columns.map((c) => ({ name: c.name, type: c.type }));
+    for (const t of schemas) {
+      const needed = pruned.tablesNeeded.includes(t.tableName);
+      const cols = (needed ? t.columns : t.columns.slice(0, 60)).map((c) => ({ name: c.name, type: c.type }));
       const input: SchemaInput = { tableName: t.tableName, columns: cols };
-      const prof = this.profiles[t.tableName];
-      if (prof) input.profiles = prof.filter((p) => cols.some((c) => c.name === p.name));
-      if (config.privacy.tabularLevel === "rows") {
-        try {
-          input.sample = await engine.sampleRows(t.tableName, 20, cols.map((c) => c.name));
-        } catch {
-          /* sample is optional */
+      if (needed) {
+        const prof = this.profiles[t.tableName];
+        if (prof) input.profiles = prof.filter((p) => cols.some((c) => c.name === p.name));
+        if (config.privacy.tabularLevel === "rows") {
+          try {
+            input.sample = await engine.sampleRows(t.tableName, 20, cols.map((c) => c.name));
+          } catch {
+            /* sample is optional */
+          }
         }
       }
       tables.push(input);
     }
-    void schemas;
 
     let repair: { sql: string[]; error: string } | undefined;
     for (let round = 1; round <= 2; round++) {

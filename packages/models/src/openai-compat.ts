@@ -132,7 +132,9 @@ export class OpenAICompatAdapter implements ChatModelPort {
       const name = (e as Error).name;
       if (name === "TimeoutError") throw new ModelError("The model call timed out.");
       if (name === "AbortError") throw new ModelError("The model call was cancelled.");
-      throw new ModelError(redact(`Could not reach the model: ${(e as Error).message}`, secrets));
+      const cause = (e as { cause?: { code?: string; message?: string } }).cause;
+      const why = cause ? ` (${cause.code ?? ""} ${cause.message ?? ""})`.replace(/\s+\)/, ")") : "";
+      throw new ModelError(redact(`Could not reach the model: ${(e as Error).message}${why}`, secrets));
     }
     if (!res.ok) {
       // Never retried: a 4xx/5xx is a real answer.
