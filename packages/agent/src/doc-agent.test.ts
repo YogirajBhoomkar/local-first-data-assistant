@@ -100,7 +100,7 @@ describe("TableAgent on documents", () => {
     expect(recs).toHaveLength(1);
     expect(recs[0]).toMatchObject({ purpose: "answer-from-chunks", outcome: "sent" });
     const sent = JSON.parse(remote.calls[0]!.messages[0]!.content) as { chunks: { ref: string; text: string }[] };
-    expect(sent.chunks.length).toBeLessThanOrEqual(6);
+    expect(sent.chunks.length).toBeLessThanOrEqual(10); // the default docTopK
     expect(sent.chunks.reduce((s, c) => s + c.text.length, 0)).toBeLessThanOrEqual(12000);
     expect(JSON.stringify(sent)).not.toMatch(/\.pdf|\.pptx|C:\\|Users/); // aliases only, never file names or paths
   });

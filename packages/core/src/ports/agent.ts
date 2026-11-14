@@ -35,3 +35,8 @@ export interface Classification {
 export interface QuestionClassifier {
   classify(question: string, history: AskRequest["history"]): Promise<Classification>;
 }
+
+/** A decision model (for example Laya): one forward pass that returns typed signals about a question. */
+export interface DecisionModelPort {
+  decide(question: string, context: { tables: string[] }): Promise<import("../routing/effort.js").DecisionSignals | null>;
+}

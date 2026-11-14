@@ -20,6 +20,8 @@ export interface PruneResult {
   /** Tables with any evidence of relevance to the question (at least one, the best). */
   tablesNeeded: string[];
   totalColumnsInScope: number;
+  /** Tables NOT chosen that match the question almost as well as the best one (a small model may pick the wrong table). */
+  ambiguousTables: string[];
 }
 
 export interface PruneOptions {
@@ -139,9 +141,12 @@ export function pruneSchema(
   }
   if (needed.length === 0 && kept[0]) needed.push(kept[0].tableName);
   const inScope = kept.filter((t) => needed.includes(t.tableName));
+  const best = kept[0]?.score ?? 0;
+  const ambiguousTables = best > 0 ? kept.filter((t) => !needed.includes(t.tableName) && t.score >= 0.75 * best).map((t) => t.tableName) : [];
   return {
     tables: kept,
     tablesNeeded: needed,
+    ambiguousTables,
     totalColumnsInScope: inScope.reduce((n, t) => n + t.columns.length, 0),
   };
 }

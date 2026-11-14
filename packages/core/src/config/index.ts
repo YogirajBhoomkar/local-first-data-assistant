@@ -63,7 +63,7 @@ export const ConfigSchema = z.object({
       maxBytesSent: z.number().int().positive().default(200000),
       denyColumns: regexList.default([]),
       maskColumns: regexList.default([]),
-      docTopK: z.number().int().positive().default(6),
+      docTopK: z.number().int().positive().default(10),
       docMaxChars: z.number().int().positive().default(12000),
       confirmBeforeSend: z.boolean().default(true),
       logFullPayload: z.boolean().default(false),
@@ -108,6 +108,13 @@ export const ConfigSchema = z.object({
       maxLocalAttempts: z.number().int().min(1).max(5).default(2),
       requireAgreement: z.boolean().default(true),
       minConfidence: z.number().min(0).max(1).default(0.6),
+      /** Effort-based routing: score thresholds for medium and high effort. */
+      effort: z
+        .object({
+          mediumAt: z.number().min(0).default(1.5),
+          highAt: z.number().min(0).default(3),
+        })
+        .prefault({}),
     })
     .prefault({}),
 });

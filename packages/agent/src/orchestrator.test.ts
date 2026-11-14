@@ -128,7 +128,8 @@ describe("TableAgent", () => {
     });
     const { events, final } = await collect(agent, "Why is premium higher in some regions?");
     expect(routes(events)[0]).toMatchObject({ route: "remote", layer: 2 });
-    expect(routes(events)[0]!.reasons).toContain('keyword "why"');
+    expect(routes(events)[0]!.reasons.join(" ")).toMatch(/high|effort/);
+    expect(routes(events)[0]!.reasons.join(" ")).toMatch(/"why"/);
     expect(final!.answer).toContain("EMEA is higher");
     const purposes = (await log.readAll()).map((r) => r.purpose);
     expect(purposes).toEqual(["write-sql", "answer-from-results"]);
@@ -167,9 +168,70 @@ describe("TableAgent", () => {
   it("disagreement between two generations escalates", async () => {
     const local = localMock((req) => sqlReply(req.temperature > 0 ? "SELECT COUNT(*) FROM t_claims" : "SELECT COUNT(*) FROM t_policies"));
     const { agent } = make({ local, remote: (l) => new RemoteSpy(l, () => ({ object: { sql: ["SELECT COUNT(*) AS n FROM t_policies"], explanation: "" } })) });
-    const { events } = await collect(agent, "How many policies are there?");
+    const { events } = await collect(agent, "How many claims were paid compared to last year?");
     expect(routes(events).at(-1)!.reasons.join(" ")).toMatch(/disagree/);
     expect(routes(events).at(-1)!.route).toBe("remote");
+  });
+
+  it("low effort uses ONE local generation (no second confirmation call)", async () => {
+    let sqlCalls = 0;
+    const local = localMock(() => { sqlCalls++; return sqlReply("SELECT COUNT(*) AS n FROM t_policies"); });
+    const { agent } = make({ local });
+    const { events, final } = await collect(agent, "How many policies are there?");
+    expect(sqlCalls).toBe(1);
+    expect(final!.route.route).toBe("local");
+    const eff = events.find((e) => e.type === "trace" && e.step === "effort") as Extract<TurnEvent, { type: "trace" }>;
+    expect(eff.data).toMatchObject({ level: "low" });
+    expect(routes(events)[0]!.reasons.join(" ")).toMatch(/low effort: one local generation/);
+  });
+
+  it("medium effort asks for a second generation to confirm", async () => {
+    let sqlCalls = 0;
+    const local = localMock(() => { sqlCalls++; return sqlReply("SELECT COUNT(*) AS n FROM t_claims"); });
+    const { agent } = make({ local });
+    const { events } = await collect(agent, "How many claims were paid compared to last year?");
+    expect(sqlCalls).toBe(2);
+    const eff = events.find((e) => e.type === "trace" && e.step === "effort") as Extract<TurnEvent, { type: "trace" }>;
+    expect(eff.data).toMatchObject({ level: "medium" });
+  });
+
+  it("high effort goes straight to the remote model: the local model is never asked for SQL", async () => {
+    let sqlCalls = 0;
+    const local = localMock(() => { sqlCalls++; return sqlReply("SELECT 1"); });
+    const { agent } = make({ local, remote: (l) => new RemoteSpy(l, () => ({ object: { sql: ["SELECT COUNT(*) AS n FROM t_policies"], explanation: "" } })) });
+    const { events } = await collect(agent, "Why is the claims count what it is, and what should we do about it?");
+    expect(sqlCalls).toBe(0);
+    expect(routes(events)[0]).toMatchObject({ route: "remote" });
+    expect(routes(events)[0]!.reasons.join(" ")).toMatch(/straight to the remote model/);
+  });
+
+  it("near-tied tables (premium exists in several) raise the effort to high", async () => {
+    const { agent } = make({
+      local: localMock(() => sqlReply("SELECT 1")),
+      remote: (l) => new RemoteSpy(l, () => ({ object: { sql: ["SELECT SUM(premium_amount) AS s FROM t_policies"], explanation: "" } })),
+    });
+    const { events } = await collect(agent, "What is the total premium for the EMEA region?");
+    const eff = events.find((e) => e.type === "trace" && e.step === "effort") as Extract<TurnEvent, { type: "trace" }>;
+    expect((eff.data!.signals as { name: string }[]).map((x) => x.name)).toContain("ambiguous-table");
+    expect(routes(events)[0]).toMatchObject({ route: "remote" });
+  });
+
+  it("a decision model (Laya) adds signals and its outage never breaks the turn", async () => {
+    const mkAgent = (decide: () => Promise<unknown>) => {
+      const dir = join(cache, `dm${++n}`);
+      const config = loadConfig({}, { cacheDir: dir, remoteModel: { baseUrl: "https://x.example/v1", model: "m", apiKey: "k" }, privacy: { confirmBeforeSend: false } });
+      return new TableAgent({
+        config, engine, local: localMock(() => sqlReply("SELECT COUNT(*) AS n FROM t_policies")), classifier: new RuleClassifier(), maskKey: "k",
+        decision: { decide } as never,
+        remoteFactory: () => new RemoteSpy(new EgressLog(dir), () => ({ object: { sql: ["SELECT COUNT(*) AS n FROM t_policies"], explanation: "" } })),
+      });
+    };
+    const high = await collect(mkAgent(async () => ({ needsReasoning: 0.95, multiStep: 0.9 })), "How many policies are there?");
+    expect(routes(high.events)[0]).toMatchObject({ route: "remote", layer: 3 });
+    expect(high.events.some((e) => e.type === "trace" && e.step === "decision-model" && e.status === "done")).toBe(true);
+    const down = await collect(mkAgent(async () => { throw new Error("connection refused"); }), "How many policies are there?");
+    expect(down.events.some((e) => e.type === "trace" && e.step === "decision-model" && e.status === "error")).toBe(true);
+    expect(down.final!.route.route).toBe("local"); // falls back to the free rule signals
   });
 
   it("a SQL error is retried once with the error, then escalates", async () => {

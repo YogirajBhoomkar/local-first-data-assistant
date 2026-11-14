@@ -1,14 +1,17 @@
 import {
   EngineError,
   chooseChart,
-  hardRules,
+  describeEffort,
+  estimateEffort,
   resultHash,
-  routeForType,
   verifyResult,
   type AgentCard,
   type AgentContract,
   type AskRequest,
   type ChatModelPort,
+  type Classification,
+  type DecisionModelPort,
+  type DecisionSignals,
   type ColumnProfile,
   type DocumentStorePort,
   type Config,
@@ -37,6 +40,8 @@ export interface TableAgentDeps {
   maskKey: string;
   /** Optional document index (PDF and PPTX). */
   docs?: DocumentStorePort;
+  /** Optional decision model (for example Laya) that adds typed effort signals to routing. */
+  decision?: DecisionModelPort;
   remoteFactory?: (config: Config) => ChatModelPort;
   confirmTimeoutMs?: number;
   version?: string;
@@ -145,46 +150,71 @@ export class TableAgent implements AgentContract {
       }
     }
 
-    // ---- routing, layer by layer
+    // ---- effort-based routing: how much work does this question need?
     const reasons: string[] = [];
     let route: "local" | "remote" = "local";
     let layer = 1;
     let qType = "other";
-    const hard = hardRules({ question: req.question, tablesNeeded: pruned.tablesNeeded.length, columnsInScope: pruned.totalColumnsInScope }, rcfg);
+    const effortInput = (classification: Classification | null, decisionSignals: DecisionSignals | null) => ({
+      question: req.question,
+      tablesNeeded: pruned.tablesNeeded.length,
+      columnsInScope: pruned.totalColumnsInScope,
+      ambiguousTables: pruned.ambiguousTables,
+      classification,
+      decision: decisionSignals,
+      maxColumnsLocal: rcfg.maxColumnsLocal,
+      escalateKeywords: rcfg.escalateKeywords,
+    });
+    const thresholds = rcfg.effort;
+    // 1) free signals: rules about the question and the schema
+    let effort = estimateEffort(effortInput(null, null), thresholds);
+    let classified = false;
+
+    // 2) a decision model (Laya), when configured, adds typed signals with calibrated confidence
+    let decisionSignals: DecisionSignals | null = null;
+    if (this.d.decision && rcfg.mode !== "remote-sql") {
+      yield { type: "trace", step: "decision-model", status: "start", detail: "Laya rates the effort this question needs" };
+      try {
+        decisionSignals = await this.d.decision.decide(req.question, { tables: pruned.tablesNeeded });
+        yield { type: "trace", step: "decision-model", status: "done", detail: decisionSignals ? "Laya answered" : "Laya returned nothing", ...(decisionSignals ? { data: { ...decisionSignals } } : {}) };
+      } catch (e) {
+        yield { type: "trace", step: "decision-model", status: "error", detail: `Laya is unavailable: ${(e as Error).message.slice(0, 100)}` };
+      }
+      effort = estimateEffort(effortInput(null, decisionSignals), thresholds);
+    }
+
+    // 3) the local model classifies the question only when the answer is still unclear and no decision model helped
+    if (localOk && !decisionSignals && rcfg.mode !== "remote-sql" && effort.score >= 0.5 && effort.score < thresholds.highAt) {
+      yield { type: "trace", step: "classify", status: "start", detail: "Classifying the question" };
+      const c = await this.d.classifier.classify(req.question, history);
+      qType = c.type;
+      classified = true;
+      yield { type: "trace", step: "classify", status: "done", detail: `${c.type} (confidence ${c.confidence.toFixed(2)})`, data: { type: c.type, confidence: c.confidence } };
+      effort = estimateEffort(effortInput(c, null), thresholds);
+    }
+    const effortText = `effort ${effort.level} (score ${effort.score}): ${describeEffort(effort)}`;
+    yield { type: "trace", step: "effort", status: "done", detail: `${effort.level} effort (score ${effort.score})`, data: { level: effort.level, score: effort.score, signals: effort.signals, mediumAt: thresholds.mediumAt, highAt: thresholds.highAt } };
+    const usedModelSignals = !!decisionSignals || classified;
 
     if (!remoteOk) {
-      reasons.push("remote model is disabled or not configured: staying local");
-      if (hard.escalate) reasons.push(...hard.reasons.map((r) => `would escalate: ${r}`));
+      reasons.push("remote model is disabled or not configured: staying local", effortText);
     } else if (rcfg.mode === "remote-sql") {
       route = "remote";
       layer = 0;
       reasons.push("routing mode is remote-sql");
-    } else if (hard.escalate) {
+    } else if (effort.level === "high") {
       route = "remote";
-      layer = 2;
-      reasons.push(...hard.reasons);
+      layer = usedModelSignals ? 3 : 2;
+      reasons.push(effortText, "too much for the small local model: sent straight to the remote model instead of failing locally first");
     } else if (!localOk) {
       route = "remote";
       layer = 2;
-      reasons.push("no local model available");
+      reasons.push("no local model available", effortText);
     } else {
-      yield { type: "trace", step: "classify", status: "start", detail: "Classifying the question" };
-      const c = await this.d.classifier.classify(req.question, history);
-      qType = c.type;
-      yield { type: "trace", step: "classify", status: "done", detail: `${c.type} (confidence ${c.confidence.toFixed(2)})`, data: { type: c.type, confidence: c.confidence } };
-      if (c.confidence < 0.5) {
-        route = "remote";
-        layer = 3;
-        reasons.push(`classifier unsure (${c.confidence.toFixed(2)})`);
-      } else if (routeForType(c.type, rcfg) === "remote") {
-        route = "remote";
-        layer = 3;
-        reasons.push(`question type "${c.type}" routes to the remote model`);
-      } else {
-        layer = 4;
-        reasons.push(`question type "${c.type}" can be answered locally`);
-      }
+      layer = 4;
+      reasons.push(effortText, effort.level === "low" ? "low effort: one local generation, cheap checks" : "medium effort: the local answer must be reproduced by a second generation");
     }
+    void qType;
     yield { type: "route", route, layer, reasons: [...reasons] };
     if (routeOnly) return;
     if (cancelled()) return yield* this.cancelledEvent();
@@ -197,7 +227,7 @@ export class TableAgent implements AgentContract {
 
     // ---- local attempt (layers 4-6)
     if (route === "local") {
-      const out: LocalOutcome = yield* this.localAttempt(req, pruned, history, signal);
+      const out: LocalOutcome = yield* this.localAttempt(req, pruned, history, effort.level === "medium" && rcfg.requireAgreement, signal);
       decision.attempts = out.attempts;
       if (out.ok && out.result) {
         result = out.result;
@@ -245,7 +275,7 @@ export class TableAgent implements AgentContract {
         notes.push(flow.ok ? "The remote SQL returned no results." : flow.message);
         // Cancelled or failed: try to keep it local.
         if (localOk && decision.attempts === 0) {
-          const out: LocalOutcome = yield* this.localAttempt(req, pruned, history, signal);
+          const out: LocalOutcome = yield* this.localAttempt(req, pruned, history, effort.level === "medium" && rcfg.requireAgreement, signal);
           decision.attempts = out.attempts;
           if (out.ok && out.result) {
             result = out.result;
@@ -304,6 +334,7 @@ export class TableAgent implements AgentContract {
     req: AskRequest,
     pruned: PruneResult,
     history: AskRequest["history"],
+    needAgreement: boolean,
     signal?: AbortSignal,
   ): AsyncGenerator<TurnEvent, LocalOutcome> {
     const { config, local, engine } = this.d;
@@ -357,7 +388,7 @@ export class TableAgent implements AgentContract {
         yield { type: "trace", step: "verify", status: "error", detail: failures.join("; ") };
         continue;
       }
-      if (rcfg.requireAgreement) {
+      if (needAgreement) {
         yield { type: "trace", step: "verify", status: "start", detail: "Asking the local model a second time to confirm it gets the same result" };
         let agree = false;
         try {
@@ -374,7 +405,7 @@ export class TableAgent implements AgentContract {
           continue;
         }
       }
-      yield { type: "trace", step: "verify", status: "done", detail: `${result.rowCount} row(s), checks passed`, data: { rows: result.rowCount, elapsedMs: result.elapsedMs, checks: ["SQL passed the read-only guard", "query ran in time", "at least one row", "result is not all null", `confidence ${out.confidence.toFixed(2)} >= ${rcfg.minConfidence}`, ...(rcfg.requireAgreement ? ["a second generation gave the same result"] : [])] } };
+      yield { type: "trace", step: "verify", status: "done", detail: `${result.rowCount} row(s), checks passed`, data: { rows: result.rowCount, elapsedMs: result.elapsedMs, checks: ["SQL passed the read-only guard", "query ran in time", "at least one row", "result is not all null", `confidence ${out.confidence.toFixed(2)} >= ${rcfg.minConfidence}`, ...(needAgreement ? ["a second generation gave the same result"] : [])] } };
       return { ok: true, result, sql: out.sql, attempts, reasons };
     }
     return { ok: false, attempts, reasons };

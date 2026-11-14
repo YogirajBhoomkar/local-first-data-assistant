@@ -18,7 +18,7 @@ export const SettingsSchema = z.object({
       maxBytesSent: z.number().int().min(1000).max(5_000_000).default(200000),
       denyColumns: z.array(z.string().max(200)).max(50).default([]),
       maskColumns: z.array(z.string().max(200)).max(50).default([]),
-      docTopK: z.number().int().min(1).max(30).default(6),
+      docTopK: z.number().int().min(1).max(30).default(10),
       docMaxChars: z.number().int().min(500).max(100000).default(12000),
       confirmBeforeSend: z.boolean().default(true),
     })
