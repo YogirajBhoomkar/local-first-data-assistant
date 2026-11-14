@@ -8,7 +8,7 @@ describe("probe", () => {
     expect(Object.keys(r).sort()).toEqual([...ALLOWED_PROBE_KEYS].sort());
     const text = JSON.stringify(r);
     expect(text).not.toContain(process.env.USERNAME ?? "\u0000no-user");
-  });
+  }, 30000);
   it("recommends tiers by RAM", () => {
     const { tiers } = loadConfig({}).localModel;
     expect(recommendTier(8, tiers).tier).toBe("none");

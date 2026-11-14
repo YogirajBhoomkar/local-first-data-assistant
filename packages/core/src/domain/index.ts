@@ -25,6 +25,8 @@ export interface ColumnProfile {
   min?: string | number;
   max?: string | number;
   topValues?: { value: string; count: number }[];
+  /** true when computed on a sample of the table */
+  sampled?: boolean;
 }
 
 export interface QueryResult {
