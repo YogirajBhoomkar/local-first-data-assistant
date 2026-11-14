@@ -3,11 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13" },
-  "workspaces": ["packages/*", "apps/*"],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -b && tsc -p apps/cli && tsc -p scripts",
     "lint": "eslint .",
     "test": "vitest run",
     "probe": "tsx scripts/probe.ts",
@@ -23,5 +28,11 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.2",
     "vitest": "5.1.0"
+  },
+  "dependencies": {
+    "commander": "15.1.0",
+    "exceljs": "4.4.0",
+    "hyparquet-writer": "0.18.0",
+    "zod": "4.6.7"
   }
 }

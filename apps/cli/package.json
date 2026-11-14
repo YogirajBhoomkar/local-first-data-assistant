@@ -1,1 +1,9 @@
-{ "name": "@lf/cli", "version": "0.0.0", "private": true, "type": "module" }
+{
+  "name": "@lf/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@lf/core": "0.0.0"
+  }
+}
