@@ -153,9 +153,13 @@ export function loadConfig(
     }
   }
   const remote: Obj = {};
-  if (env.LF_REMOTE_BASE_URL) remote.baseUrl = env.LF_REMOTE_BASE_URL;
-  if (env.LF_REMOTE_MODEL) remote.model = env.LF_REMOTE_MODEL;
-  if (env.LF_REMOTE_API_KEY) remote.apiKey = env.LF_REMOTE_API_KEY;
+  // LF_REMOTE_* win; LLM_* are the names the Conversational BI app uses for its LiteLLM gateway, accepted so the same values work here.
+  const baseUrl = env.LF_REMOTE_BASE_URL || env.LLM_BASE_URL;
+  const model = env.LF_REMOTE_MODEL || env.LLM_MODEL;
+  const apiKey = env.LF_REMOTE_API_KEY || env.LLM_API_KEY;
+  if (baseUrl) remote.baseUrl = baseUrl;
+  if (model) remote.model = model;
+  if (apiKey) remote.apiKey = apiKey;
   raw = merge(merge(raw, { remoteModel: remote }), overrides);
   const parsed = ConfigSchema.safeParse(raw);
   if (!parsed.success) {

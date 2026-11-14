@@ -21,6 +21,13 @@ import { selectLocalModel } from "@lf/models";
 import { DocumentStore } from "@lf/docs";
 import { collectProbe, summarize } from "../../../scripts/probe-lib.js";
 
+// Load a .env from the working directory if there is one (values are never printed). Real env vars win.
+try {
+  process.loadEnvFile(".env");
+} catch {
+  /* no .env: fine */
+}
+
 const program = new Command().name("lf").description("Local-first desktop agent (developer CLI)");
 
 function printTable(r: QueryResult): void {

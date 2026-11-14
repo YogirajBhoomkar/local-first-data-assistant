@@ -14,6 +14,12 @@ describe("config", () => {
     expect(c.remoteModel.model).toBe("m");
     expect(c.remoteModel.apiKey).toBe("sk-secret-1234");
   });
+  it("accepts the Conversational BI names (LLM_*) and prefers LF_REMOTE_*", () => {
+    const a = loadConfig({ LLM_BASE_URL: "https://gw.example/v1", LLM_MODEL: "gpt-x", LLM_API_KEY: "k1" });
+    expect(a.remoteModel).toMatchObject({ baseUrl: "https://gw.example/v1", model: "gpt-x", apiKey: "k1" });
+    const b = loadConfig({ LLM_MODEL: "old", LF_REMOTE_MODEL: "new" });
+    expect(b.remoteModel.model).toBe("new");
+  });
   it("fails with a readable message on invalid values", () => {
     expect(() => loadConfig({}, { engine: { threads: -1 } })).toThrow(ConfigError);
     expect(() => loadConfig({}, { privacy: { tabularLevel: "all" } })).toThrow(/privacy\.tabularLevel/);
